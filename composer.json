@@ -1,0 +1,7 @@
+{
+    "name": "divengine/divNoSQL",
+    "description": "PHP No-SQL Databse System",
+    "require": {
+		"php": ">=5.3.0"
+    }
+}

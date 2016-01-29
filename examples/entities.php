@@ -1,0 +1,48 @@
+<?php
+
+/**
+ * divNoSQL
+ *
+ * This is a example for entities
+ *
+ * @author Rafa Rodriguez <rafacuba2015@gmail.com>
+ *        
+ */
+include "../divNoSQL.php";
+
+// Your entity
+class Person {
+	public $first_name;
+	public $last_name;
+	public function getFullName() {
+		return $this->first_name . " " . $this->last_name;
+	}
+}
+
+// Clear schema
+$db = new divNoSQL ( 'database' );
+
+$db->delNodes ();
+
+$person = new Person ();
+$person->first_name = "John";
+$person->last_name = "Nash";
+
+// Save entity
+$db->addNode ( $person );
+
+$person = new Person ();
+
+$person->first_name = "Albert";
+$person->last_name = "Einstein";
+
+// Save entity
+$db->addNode ( $person );
+
+$entities = $db->getNodes ( array (
+		'order' => 'first_name' 
+) );
+
+foreach ( $entities as $e ) {
+	echo $e->getFullName () . "<br/>\n";
+}
