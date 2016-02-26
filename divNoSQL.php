@@ -22,17 +22,15 @@
  * http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
  *
  * @author Rafa Rodriguez <rafacuba2015@gmail.com>
- * @version 1.1
+ * @version 1.2
  * @link http://divengine.com/solutions/div-nosql
  * @link http://github.com/divengine/divNoSQL     
  */
 
 /* CONSTANTS */
-if (! defined("DIV_NOSQL_ROOT"))
-    define("DIV_NOSQL_ROOT", "./");
+if (! defined("DIV_NOSQL_ROOT")) define("DIV_NOSQL_ROOT", "./");
 
-if (! defined("DIV_NOSQL_LOG_FILE"))
-    define("DIV_NOSQL_LOG_FILE", DIV_NOSQL_ROOT . "/divNoSQL.log");
+if (! defined("DIV_NOSQL_LOG_FILE")) define("DIV_NOSQL_LOG_FILE", DIV_NOSQL_ROOT . "/divNoSQL.log");
 
 define("DIV_NOSQL_ROLLBACK_TRANSACTION", "DIV_NOSQL_ROLLBACK_TRANSACTION");
 
@@ -72,34 +70,27 @@ class divNoSQL
     {
         $null = null;
         
-        if (is_null($source))
-            return $complement;
+        if (is_null($source)) return $complement;
         
-        if (is_null($complement))
-            return $source;
+        if (is_null($complement)) return $source;
         
-        if (is_scalar($source) && is_scalar($complement))
-            return $complement;
+        if (is_scalar($source) && is_scalar($complement)) return $complement;
         
-        if (is_scalar($complement) || is_scalar($source))
-            return $source;
+        if (is_scalar($complement) || is_scalar($source)) return $source;
         
         if ($level < 100) { // prevent infinite loop
-            if (is_object($complement))
-                $complement = get_object_vars($complement);
+            if (is_object($complement)) $complement = get_object_vars($complement);
             
             foreach ($complement as $key => $value) {
                 if (is_object($source)) {
                     if (isset($source->$key))
-                        $source->$key = self::cop($source->$key, $value, 
-                                $level + 1);
+                        $source->$key = self::cop($source->$key, $value, $level + 1);
                     else
                         $source->$key = self::cop($null, $value, $level + 1);
                 }
                 if (is_array($source)) {
                     if (isset($source[$key]))
-                        $source[$key] = self::cop($source[$key], $value, 
-                                $level + 1);
+                        $source[$key] = self::cop($source[$key], $value, $level + 1);
                     else
                         $source[$key] = self::cop($null, $value, $level + 1);
                 }
@@ -119,8 +110,7 @@ class divNoSQL
         $path = DIV_NOSQL_ROOT;
         foreach ($arr as $d) {
             $path .= "$d/";
-            if (! file_exists($path))
-                mkdir($path);
+            if (! file_exists($path)) mkdir($path);
         }
     }
 
@@ -143,18 +133,15 @@ class divNoSQL
      */
     public function renameSchema ($newname, $schema)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         
-        if (! $this->existsSchema($schema))
-            return false;
+        if (! $this->existsSchema($schema)) return false;
         
         $restore = $schema === $this->schema;
         
         rename(DIV_NOSQL_ROOT . $schema, DIV_NOSQL_ROOT . $newname);
         
-        if ($restore)
-            $this->schema = $newname;
+        if ($restore) $this->schema = $newname;
         
         return true;
     }
@@ -168,24 +155,21 @@ class divNoSQL
     public function delSchema ($schema)
     {
         if (file_exists(DIV_NOSQL_ROOT . $schema)) {
-            if (! is_dir(DIV_NOSQL_ROOT . $schema))
-                return false;
+            if (! is_dir(DIV_NOSQL_ROOT . $schema)) return false;
             $dir = scandir(DIV_NOSQL_ROOT . $schema);
             foreach ($dir as $entry) {
                 if ($entry != "." && $entry != "..") {
                     if (is_dir(DIV_NOSQL_ROOT . $schema . "/$entry")) {
                         $this->delSchema($schema . "/$entry");
                     } else {
-                        if ($entry != ".locks" && $entry != ".references")
-                            $this->delNode($entry, $schema);
+                        if ($entry != ".locks" && $entry != ".references") $this->delNode($entry, $schema);
                     }
                 }
             }
             
-            if (file_exists(DIV_NOSQL_ROOT . $schema . "/.locks"))
-                unlink(DIV_NOSQL_ROOT . $schema . "/.locks");
-                
-                // Remove orphan references
+            if (file_exists(DIV_NOSQL_ROOT . $schema . "/.locks")) unlink(DIV_NOSQL_ROOT . $schema . "/.locks");
+            
+            // Remove orphan references
             $references = $this->getReferences($schema);
             
             foreach ($references as $rel) {
@@ -196,18 +180,14 @@ class divNoSQL
                     $sch = $rel['foreign_schema'];
                     
                     // If the schema of reference is a subschema of this schema
-                if ($schema == substr($sch, 0, strlen($schema)))
-                    continue;
+                if ($schema == substr($sch, 0, strlen($schema))) continue;
                 
                 $relats = $this->getReferences($sch);
                 $newreferences = array();
                 foreach ($relats as $re) {
-                    if ($re['schema'] != $schema &&
-                             $re['foreign_schema'] != $schema)
-                        $newreferences[] = $re;
+                    if ($re['schema'] != $schema && $re['foreign_schema'] != $schema) $newreferences[] = $re;
                 }
-                file_put_contents(DIV_NOSQL_ROOT . $sch . "/.references", 
-                        serialize($newreferences));
+                file_put_contents(DIV_NOSQL_ROOT . $sch . "/.references", serialize($newreferences));
             }
             
             unlink(DIV_NOSQL_ROOT . $schema . "/.references");
@@ -227,10 +207,8 @@ class divNoSQL
      */
     public function addNode ($node, $id = null, $schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
-        if (is_null($id))
-            $id = date("Ymdhis") . uniqid();
+        if (is_null($schema)) $schema = $this->schema;
+        if (is_null($id)) $id = date("Ymdhis") . uniqid();
         
         if ($id == ".references" || $id == ".locks") {
             self::log("Invalid ID '$id' for node");
@@ -239,8 +217,7 @@ class divNoSQL
         
         $node = $this->triggerBeforeAdd($node, $id, $schema);
         
-        if ($node == false)
-            return false;
+        if ($node == false) return false;
         
         $data = serialize($node);
         
@@ -278,14 +255,13 @@ class divNoSQL
      * @param string $schema            
      * @return mixed
      */
-    public function getNode ($id, $schema = null)
+    public function getNode ($id, $schema = null, $default = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         if (file_exists(DIV_NOSQL_ROOT . $schema . "/$id"))
             $data = file_get_contents(DIV_NOSQL_ROOT . $schema . "/$id");
         else
-            return null;
+            return $default;
         $sec = 0;
         while ($this->isLockNode($id, $schema) || $sec > 999999) {
             $sec ++;
@@ -304,18 +280,15 @@ class divNoSQL
      */
     public function getNodesID ($schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         
-        if (! $this->existsSchema($schema))
-            return false;
+        if (! $this->existsSchema($schema)) return false;
         
         $list = array();
         $dir = scandir(DIV_NOSQL_ROOT . $schema);
         foreach ($dir as $entry) {
             if (! is_dir(DIV_NOSQL_ROOT . $schema . "/$entry")) {
-                if ($entry != ".references" && $entry != ".locks")
-                    $list[] = $entry;
+                if ($entry != ".references" && $entry != ".locks") $list[] = $entry;
             }
         }
         
@@ -331,11 +304,9 @@ class divNoSQL
      */
     public function getNodes ($params = array(), $schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         
-        if (! $this->existsSchema($schema))
-            return false;
+        if (! $this->existsSchema($schema)) return false;
         
         $dp = array(
                 "where" => "true",
@@ -367,8 +338,7 @@ class divNoSQL
                 $w = $params['where'];
                 
                 foreach ($vars as $key => $value) {
-                    $w = str_replace('{' . $key . '}', '$vars["' . $key . '"]', 
-                            $w);
+                    $w = str_replace('{' . $key . '}', '$vars["' . $key . '"]', $w);
                 }
                 $w = str_replace('{id}', '$id', $w);
                 
@@ -388,8 +358,7 @@ class divNoSQL
                                     unset($node[$key]);
                             }
                     }
-                    if ($c >= $params['offset'])
-                        $list[$id] = $node;
+                    if ($c >= $params['offset']) $list[$id] = $node;
                     $c ++;
                 }
             }
@@ -403,20 +372,17 @@ class divNoSQL
             foreach ($list as $id => $node) {
                 $node = $this->getNode($id);
                 $sorted[$id] = $node;
-                if (is_object($node))
-                    if (isset($node->$order))
-                        $sorted[$id] = $node->$order;
-                    else
-                        $sorted[$id] = null;
-                if (is_array($node))
-                    if (isset($node[$order]))
-                        $sorted[$id] = $node[$order];
-                    else
-                        $sorted[$id] = null;
+                if (is_object($node)) if (isset($node->$order))
+                    $sorted[$id] = $node->$order;
+                else
+                    $sorted[$id] = null;
+                if (is_array($node)) if (isset($node[$order]))
+                    $sorted[$id] = $node[$order];
+                else
+                    $sorted[$id] = null;
             }
             if (asort($sorted)) {
-                if ($params['order_asc'] === false)
-                    $sorted = array_reverse($sorted);
+                if ($params['order_asc'] === false) $sorted = array_reverse($sorted);
                 $newlist = array();
                 foreach ($sorted as $id => $value)
                     $newlist[$id] = $list[$id];
@@ -436,11 +402,9 @@ class divNoSQL
      */
     public function getCount ($params = array(), $schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         
-        if (! $this->existsSchema($schema))
-            return false;
+        if (! $this->existsSchema($schema)) return false;
         
         $dp = array(
                 "where" => "true"
@@ -471,8 +435,7 @@ class divNoSQL
             
             $r = false;
             eval('$r = ' . $w . ';');
-            if ($r === true)
-                $c ++;
+            if ($r === true) $c ++;
         }
         return $c;
     }
@@ -486,11 +449,9 @@ class divNoSQL
      */
     public function delNode ($id, $schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         
-        if (! $this->existsSchema($schema))
-            return false;
+        if (! $this->existsSchema($schema)) return false;
         
         if (file_exists(DIV_NOSQL_ROOT . $schema . "/$id")) {
             $sec = 0;
@@ -510,8 +471,7 @@ class divNoSQL
             $references = $this->getReferences($schema);
             foreach ($references as $rel) {
                 if ($rel['foreign_schema'] == $schema) {
-                    if (! $this->existsSchema($rel['schema']))
-                        continue;
+                    if (! $this->existsSchema($rel['schema'])) continue;
                     $ids = $this->getNodesID($rel['schema']);
                     foreach ($ids as $fid) {
                         $node = $this->getNode($fid, $rel['schema']);
@@ -530,10 +490,9 @@ class divNoSQL
                                     if ($rel['delete_cascade'] == true)
                                         $procede = true;
                                     else
-                                        $this->setNode($fid, 
-                                                array(
-                                                        $rel['property'] => null
-                                                ), $rel['schema']);
+                                        $this->setNode($fid, array(
+                                                $rel['property'] => null
+                                        ), $rel['schema']);
                                 }
                             }
                         } elseif (is_object($node)) {
@@ -542,10 +501,9 @@ class divNoSQL
                                     if ($rel['delete_cascade'] == true)
                                         $procede = true;
                                     else
-                                        $this->setNode($fid, 
-                                                array(
-                                                        $rel['property'] => null
-                                                ), $rel['schema']);
+                                        $this->setNode($fid, array(
+                                                $rel['property'] => null
+                                        ), $rel['schema']);
                                 }
                             }
                         }
@@ -565,11 +523,9 @@ class divNoSQL
             if ($r === DIV_NOSQL_ROLLBACK_TRANSACTION) {
                 foreach ($restore as $rest) {
                     if ($this->existsNode($rest['id'], $rest['schema'])) {
-                        $this->setNode($rest['id'], $rest['node'], 
-                                $rest['schema']);
+                        $this->setNode($rest['id'], $rest['node'], $rest['schema']);
                     } else {
-                        $this->addNode($rest['node'], $rest['id'], 
-                                $rest['schema']);
+                        $this->addNode($rest['node'], $rest['id'], $rest['schema']);
                     }
                 }
                 return DIV_NOSQL_ROLLBACK_TRANSACTION;
@@ -601,11 +557,9 @@ class divNoSQL
      */
     public function delNodes ($params = array(), $schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         
-        if (! $this->existsSchema($schema))
-            return false;
+        if (! $this->existsSchema($schema)) return false;
         
         $dp = array(
                 "where" => "true",
@@ -636,11 +590,9 @@ class divNoSQL
      */
     public function setNode ($id, $data, $schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         
-        if (! $this->existsSchema($schema))
-            return false;
+        if (! $this->existsSchema($schema)) return false;
         
         $node = $this->getNode($id, $schema);
         
@@ -658,7 +610,7 @@ class divNoSQL
         $old = $node;
         $node = self::cop($node, $data);
         
-        file_put_contents($schema . "/$id", serialize($node));
+        file_put_contents(DIV_NOSQL_ROOT . $schema . "/$id", serialize($node));
         
         $r = $this->triggerAfterSet($id, $old, $node, $data);
         
@@ -688,11 +640,9 @@ class divNoSQL
      */
     public function setNodeID ($id_old, $id_new, $schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         
-        if (! $this->existsSchema($schema))
-            return false;
+        if (! $this->existsSchema($schema)) return false;
         
         $sec = 0;
         while ($this->isLockNode($id_old, $schema) || $sec > 999999) {
@@ -705,8 +655,7 @@ class divNoSQL
         // Update cascade
         $references = $this->getReferences($schema);
         foreach ($references as $rel) {
-            if ($rel['foreign_schema'] == $schema &&
-                     $rel['update_cascade'] == true) {
+            if ($rel['foreign_schema'] == $schema && $rel['update_cascade'] == true) {
                 $ids = $this->getNodesID($rel['schema']);
                 foreach ($ids as $fid) {
                     $node = $this->getNode($fid, $rel['schema']);
@@ -715,27 +664,22 @@ class divNoSQL
                     
                     if (is_array($node)) {
                         if (isset($node[$rel['property']])) {
-                            if ($node[$rel['property']] == $id_old)
-                                $procede = true;
+                            if ($node[$rel['property']] == $id_old) $procede = true;
                         }
                     } elseif (is_object($node)) {
                         if (isset($node->$rel['property'])) {
-                            if ($node->$rel['property'] == $id_old)
-                                $procede = true;
+                            if ($node->$rel['property'] == $id_old) $procede = true;
                         }
                     }
                     
-                    if ($procede)
-                        $this->setNode($fid, 
-                                array(
-                                        $rel['property'] => $id_new
-                                ), $rel['schema']);
+                    if ($procede) $this->setNode($fid, array(
+                            $rel['property'] => $id_new
+                    ), $rel['schema']);
                 }
             }
         }
         
-        rename(DIV_NOSQL_ROOT . $schema . "/$id_old", 
-                DIV_NOSQL_ROOT . $schema . "/$id_new");
+        rename(DIV_NOSQL_ROOT . $schema . "/$id_old", DIV_NOSQL_ROOT . $schema . "/$id_new");
         
         $this->unlockNode($id_old, $schema);
         $this->unlockNode($id_new, $schema);
@@ -749,12 +693,10 @@ class divNoSQL
      */
     public function existsSchema ($schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         
         if (file_exists(DIV_NOSQL_ROOT . $schema)) {
-            if (is_dir(DIV_NOSQL_ROOT . $schema))
-                return true;
+            if (is_dir(DIV_NOSQL_ROOT . $schema)) return true;
         }
         
         self::log("Schema $schema not exists");
@@ -771,12 +713,10 @@ class divNoSQL
      */
     public function existsNode ($id, $schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         
         if (file_exists(DIV_NOSQL_ROOT . $schema . "/$id")) {
-            if (! is_dir(DIV_NOSQL_ROOT . $schema . "/$id"))
-                return true;
+            if (! is_dir(DIV_NOSQL_ROOT . $schema . "/$id")) return true;
         }
         
         return false;
@@ -790,11 +730,9 @@ class divNoSQL
      */
     public function getReferences ($schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         
-        if (! $this->existsSchema($schema))
-            return false;
+        if (! $this->existsSchema($schema)) return false;
         
         $path = DIV_NOSQL_ROOT . $schema . "/.references";
         if (! file_exists($path)) {
@@ -812,11 +750,9 @@ class divNoSQL
      */
     private function getLocks ($schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         
-        if (! $this->existsSchema($schema))
-            return false;
+        if (! $this->existsSchema($schema)) return false;
         
         $path = DIV_NOSQL_ROOT . $schema . "/.locks";
         if (! file_exists($path)) {
@@ -835,13 +771,10 @@ class divNoSQL
      */
     private function lockNode ($id, $schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
-        if (! $this->existsSchema($schema))
-            return false;
+        if (is_null($schema)) $schema = $this->schema;
+        if (! $this->existsSchema($schema)) return false;
         
-        if (! file_exists(DIV_NOSQL_ROOT . $schema . "/" . $id))
-            return false;
+        if (! file_exists(DIV_NOSQL_ROOT . $schema . "/" . $id)) return false;
         
         $blocked = $this->getLocks($schema);
         $blocked[$id] = true;
@@ -861,22 +794,18 @@ class divNoSQL
      */
     private function unlockNode ($id, $schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
-        if (! $this->existsSchema($schema))
-            return false;
+        if (is_null($schema)) $schema = $this->schema;
+        if (! $this->existsSchema($schema)) return false;
         
         $blocked = $this->getLocks($schema);
         
-        if (isset($blocked[$id]))
-            unset($blocked[$id]);
+        if (isset($blocked[$id])) unset($blocked[$id]);
         
         $path = DIV_NOSQL_ROOT . $schema . "/.locks";
         $nlocks = array();
         
         foreach ($blocked as $lock)
-            if (file_exists(DIV_NOSQL_ROOT . $schema . "/$lock") && $id != $lock)
-                $nlocks[] = $lock;
+            if (file_exists(DIV_NOSQL_ROOT . $schema . "/$lock") && $id != $lock) $nlocks[] = $lock;
         
         file_put_contents($path, serialize($nlocks));
         return true;
@@ -891,14 +820,11 @@ class divNoSQL
      */
     public function isLockNode ($id, $schema = null)
     {
-        if (is_null($schema))
-            $schema = $this->schema;
+        if (is_null($schema)) $schema = $this->schema;
         
-        if (! $this->existsSchema($schema))
-            return false;
+        if (! $this->existsSchema($schema)) return false;
         
-        if (! file_exists(DIV_NOSQL_ROOT . $schema . "/" . $id))
-            return false;
+        if (! file_exists(DIV_NOSQL_ROOT . $schema . "/" . $id)) return false;
         
         $blocked = $this->getLocks($schema);
         return isset($blocked[$id]);
@@ -920,31 +846,25 @@ class divNoSQL
         );
         $params = self::cop($dp, $params);
         
-        if (! isset($params['property']))
-            return false;
+        if (! isset($params['property'])) return false;
         
         $schema = $params['schema'];
         $foreign_schema = $params['foreign_schema'];
         
-        if (! $this->existsSchema($schema))
-            return false;
-        if (! $this->existsSchema($foreign_schema))
-            return false;
+        if (! $this->existsSchema($schema)) return false;
+        if (! $this->existsSchema($foreign_schema)) return false;
         
         $references = $this->getReferences($schema);
         $freferences = $this->getReferences($foreign_schema);
         
         foreach ($references as $rel)
-            if (serialize($rel) == serialize($params))
-                return true;
+            if (serialize($rel) == serialize($params)) return true;
         
         $references[] = $params;
         $freferences[] = $params;
         
-        file_put_contents(DIV_NOSQL_ROOT . $schema . "/.references", 
-                serialize($references));
-        file_put_contents(DIV_NOSQL_ROOT . $foreign_schema . "/.references", 
-                serialize($freferences));
+        file_put_contents(DIV_NOSQL_ROOT . $schema . "/.references", serialize($references));
+        file_put_contents(DIV_NOSQL_ROOT . $foreign_schema . "/.references", serialize($freferences));
         
         return true;
     }
@@ -966,8 +886,7 @@ class divNoSQL
         
         $params = self::cop($dp, $params);
         
-        if (! isset($params['property']))
-            return false;
+        if (! isset($params['property'])) return false;
         
         $schema = $params['schema'];
         $foreign_schema = $params['foreign_schema'];
@@ -975,29 +894,21 @@ class divNoSQL
         $references = $this->getReferences($schema);
         $newreferences = array();
         foreach ($references as $rel) {
-            if ($rel['schema'] == $params['schema'] &&
-                     $rel['foreign_schema'] == $params['foreign_schema'] &&
-                     $rel['property'] == $params['property'])
-                continue;
+            if ($rel['schema'] == $params['schema'] && $rel['foreign_schema'] == $params['foreign_schema'] && $rel['property'] == $params['property']) continue;
             $newreferences[] = $rel;
         }
         
-        file_put_contents(DIV_NOSQL_ROOT . $schema . "/.references", 
-                serialize($newreferences));
+        file_put_contents(DIV_NOSQL_ROOT . $schema . "/.references", serialize($newreferences));
         
         $references = $this->getReferences($foreign_schema);
         $newreferences = array();
         foreach ($references as $rel) {
-            if ($rel['schema'] == $params['schema'] &&
-                     $rel['foreign_schema'] == $params['foreign_schema'] &&
-                     $rel['property'] == $params['property'])
-                continue;
+            if ($rel['schema'] == $params['schema'] && $rel['foreign_schema'] == $params['foreign_schema'] && $rel['property'] == $params['property']) continue;
             
             $newreferences[] = $rel;
         }
         
-        file_put_contents(DIV_NOSQL_ROOT . $foreign_schema . "/.references", 
-                serialize($newreferences));
+        file_put_contents(DIV_NOSQL_ROOT . $foreign_schema . "/.references", serialize($newreferences));
         
         return true;
     }
