@@ -21,15 +21,13 @@
  * along with this program as the file LICENSE.txt; if not, please see
  * http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
  *
- * @author Rafa Rodriguez <rafacuba2015@gmail.com>
+ * @author Rafa Rodriguez <rafageist86@gmail.com>
  * @version 1.2
- * @link http://divengine.com/solutions/div-nosql
  * @link http://github.com/divengine/divNoSQL     
  */
 
 /* CONSTANTS */
 if (! defined("DIV_NOSQL_ROOT")) define("DIV_NOSQL_ROOT", "./");
-
 if (! defined("DIV_NOSQL_LOG_FILE")) define("DIV_NOSQL_LOG_FILE", DIV_NOSQL_ROOT . "/divNoSQL.log");
 
 define("DIV_NOSQL_ROLLBACK_TRANSACTION", "DIV_NOSQL_ROLLBACK_TRANSACTION");
@@ -43,9 +41,7 @@ class divNoSQL
     var $schema = null;
 
     static $__log_mode = false;
-
     static $__log_file = DIV_NOSQL_LOG_FILE;
-
     static $__log_messages = array();
 
     /**
@@ -126,10 +122,49 @@ class divNoSQL
     }
 
     /**
+     * Get recursive list of schemas
+     *
+     * @param $from
+     * @return array
+     */
+    public function getSchemas($from)
+    {
+        $schemas = [];
+
+        if ($this->existsSchema($from))
+        {
+            $schemas[] = $from;
+
+            $stack = [$from => $from];
+
+            while (count($stack) > 0) // avoid recursive calls!!
+            {
+                $from = array_shift($stack);
+
+                $dir = scandir(DIV_NOSQL_ROOT . $from);
+
+                foreach ($dir as $entry)
+                {
+                    $fullSchema = str_replace("//", "/", "$from/$entry");
+
+                    if ($entry != '.' && $entry != '..' && ! is_file(DIV_NOSQL_ROOT . $fullSchema))
+                    {
+                        $stack[$fullSchema] = $fullSchema;
+                        $schemas[] = $fullSchema;
+                    }
+                }
+            }
+        }
+
+        return $schemas;
+    }
+
+    /**
      * Rename a schema
      *
      * @param string $schema            
-     * @param string $newname            
+     * @param string $newname
+     * @return boolean
      */
     public function renameSchema ($newname, $schema)
     {
@@ -258,7 +293,7 @@ class divNoSQL
     public function getNode ($id, $schema = null, $default = null)
     {
         if (is_null($schema)) $schema = $this->schema;
-        if (file_exists(DIV_NOSQL_ROOT . $schema . "/$id"))
+        if (file_exists(DIV_NOSQL_ROOT . $schema . "/$id") && is_file(DIV_NOSQL_ROOT . $schema . "/$id"))
             $data = file_get_contents(DIV_NOSQL_ROOT . $schema . "/$id");
         else
             return $default;
@@ -302,7 +337,7 @@ class divNoSQL
      * @param string $schema            
      * @return array
      */
-    public function getNodes ($params = array(), $schema = null)
+    public function getNodes ($params = array(), $schema = null, $onlyIds = false)
     {
         if (is_null($schema)) $schema = $this->schema;
         
@@ -319,77 +354,137 @@ class divNoSQL
         
         $params = self::cop($dp, $params);
         $ids = $this->getNodesID($schema);
-        $list = array();
+
+        // get result
+        $newIds = [];
+        foreach ($ids as $id) {
+
+            $node = $this->getNode($id, $schema);
+
+            $vars = [];
+            if (is_object($node)) $vars = get_object_vars($node);
+            elseif (is_array($node)) $vars = $node;
+            elseif (is_scalar($node)) $vars = ['value' => $node];
+            $w = $params['where'];
+
+            foreach ($vars as $key => $value) {
+                $w = str_replace('{' . $key . '}', '$vars["' . $key . '"]', $w);
+            }
+
+            $w = str_replace('{id}', '$id', $w);
+
+            $r = false;
+            eval('$r = ' . $w . ';');
+
+            if ($r === true) {
+                /*if (is_object($node) || is_array($node)) {
+                    $fields = explode(",", $params['fields']);
+                    foreach ($fields as $key => $value) $fields[$value] = true;
+                    foreach ($vars as $key => $value)
+                        if (! isset($fields[$key]) && ! isset($fields['*'])) {
+                            if (is_object($node)) unset($node->$key);
+                            elseif (is_array($node)) unset($node[$key]);
+                        }
+                }*/
+
+                $newIds[] = $id;
+            }
+        }
+
+        // sort results
+        $order = $params['order'];
+
+        if ($order !== false && ! is_null($order))
+        {
+            $sorted = array();
+            foreach ($newIds as $id)
+            {
+                $node = $this->getNode($id, $schema);
+                $sorted[$id] = $node;
+                if (is_object($node) && isset($node->$order)) $sorted[$id] = $node->$order;
+                if (is_array($node) && isset($node[$order])) $sorted[$id] = $node[$order];
+            }
+
+            if (asort($sorted))
+            {
+                if ($params['order_asc'] === false) $sorted = array_reverse($sorted);
+                $newIds = $sorted;
+            }
+        }
+
+        // limit result
+        $list = [];
         $i = 0;
         $c = 0;
-        foreach ($ids as $id) {
-            if ($c < $params['limit'] || $params['limit'] == - 1) {
-                
-                $node = $this->getNode($id, $schema);
-                
-                if (is_object($node))
-                    $vars = get_object_vars($node);
-                elseif (is_array($node))
-                    $vars = $node;
-                elseif (is_scalar($node))
-                    $vars = array(
-                            'value' => $node
-                    );
-                $w = $params['where'];
-                
-                foreach ($vars as $key => $value) {
-                    $w = str_replace('{' . $key . '}', '$vars["' . $key . '"]', $w);
+        foreach ($newIds as $id)
+        {
+            if ($i >= $params['offset'])
+                if ($c < $params['limit'] || $params['limit'] == - 1)
+                {
+                    if ( ! $onlyIds) $list[$id] = $this->getNode($id, $schema);
+                    else $list[] = $id;
+                    $c++;
                 }
-                $w = str_replace('{id}', '$id', $w);
-                
-                $r = false;
-                eval('$r = ' . $w . ';');
-                
-                if ($r === true) {
-                    if (is_object($node) || is_array($node)) {
-                        $fields = explode(",", $params['fields']);
-                        foreach ($fields as $key => $value)
-                            $fields[$value] = true;
-                        foreach ($vars as $key => $value)
-                            if (! isset($fields[$key]) && ! isset($fields['*'])) {
-                                if (is_object($node))
-                                    unset($node->$key);
-                                elseif (is_array($node))
-                                    unset($node[$key]);
-                            }
+            $i++;
+        }
+
+        return $list;
+    }
+
+    /**
+     * Return a list of nodes recursively
+     *
+     * @param string $schema
+     * @param array $paramsBySchema Apply this params by schema
+     * @param array $paramsDefault Default params by schema
+     * @param integer $offset From offset
+     * @param integer $limit Limit the result
+     * @param bool $onlyIds Return only IDs, not the nodes
+     * @return array
+     */
+    public function getRecursiveNodes($schema = "/", $paramsBySchema = [], $paramsDefault = [], $offset = 0, $limit = -1, $onlyIds = false)
+    {
+        $schemas = [$schema];
+        $schemas = array_merge($schemas, $this->getSchemas($schema));
+
+        $nodes = [];
+        foreach ($schemas as $schema)
+        {
+            $params = $paramsDefault;
+            if (isset($paramsBySchema[$schema]))
+            {
+                $params = $paramsBySchema[$schema];
+                $params = array_merge($paramsDefault, $params);
+            }
+
+            $list = $this->getNodes($params, $schema, true);
+
+            if ($list !== false)
+                $nodes[$schema] = $list;
+        }
+
+        // limit result
+        $list = [];
+        $i = 0;
+        $c = 0;
+        foreach ($nodes as $schema => $ids)
+        {
+            foreach($ids as $id)
+            {
+                if ($i >= $offset)
+                {
+                    if ($c < $limit || $limit == - 1)
+                    {
+                        if ( ! isset($list[$schema])) $list[$schema] = [];
+                        if ( ! $onlyIds) $list[$schema][$id] = $this->getNode($id, $schema);
+                        else $list[$schema][$id] = $id;
+                        $c++;
                     }
-                    if ($c >= $params['offset']) $list[$id] = $node;
-                    $c ++;
                 }
             }
-            $i ++;
+            $i++;
         }
-        $order = $params['order'];
-        
-        if ($order !== false) {
-            $c = count($list);
-            $sorted = array();
-            foreach ($list as $id => $node) {
-                $node = $this->getNode($id);
-                $sorted[$id] = $node;
-                if (is_object($node)) if (isset($node->$order))
-                    $sorted[$id] = $node->$order;
-                else
-                    $sorted[$id] = null;
-                if (is_array($node)) if (isset($node[$order]))
-                    $sorted[$id] = $node[$order];
-                else
-                    $sorted[$id] = null;
-            }
-            if (asort($sorted)) {
-                if ($params['order_asc'] === false) $sorted = array_reverse($sorted);
-                $newlist = array();
-                foreach ($sorted as $id => $value)
-                    $newlist[$id] = $list[$id];
-                $list = $newlist;
-            }
-        }
-        
+
         return $list;
     }
 
