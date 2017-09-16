@@ -20,7 +20,7 @@ class Person {
 }
 
 // Clear schema
-$db = new divNoSQL ( 'database' );
+$db = new divNodes ( 'database' );
 
 $db->delNodes ();
 

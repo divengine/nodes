@@ -11,7 +11,7 @@
 include "../../divNoSQL.php";
 
 // Adding a schema on the fly if not exists
-$db = new divNoSQL("database/companies");
+$db = new divNodes("database/companies");
 
 // Deleting all nodes in schema database/companies
 $db->delNodes();

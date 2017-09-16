@@ -35,7 +35,7 @@ define("DIV_NOSQL_ROLLBACK_TRANSACTION", "DIV_NOSQL_ROLLBACK_TRANSACTION");
 /**
  * The class
  */
-class divNoSQL
+class divNodes
 {
 
     var $schema = null;
@@ -48,7 +48,8 @@ class divNoSQL
      * Constructor
      *
      * @param string $schema            
-     * @return divNoSQL
+     *
+     * @return divNodes
      */
     public function __construct ($schema)
     {

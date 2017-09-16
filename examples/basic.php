@@ -5,13 +5,12 @@
  *
  * This is a basic example of divNoSQL that demonstrates their main functionalities.
  *
- * @author Rafa Rodriguez <rafacuba2015@gmail.com>
- *        
+ * @author Rafa Rodriguez [@rafageist] <rafageis@hotmail.com>
  */
-include "../divNoSQL.php";
+include "../divNodes.php";
 
 // Adding a schema on the fly if not exists
-$db = new divNoSQL("database/contacts");
+$db = new divNodes("database/contacts");
 
 // Deleting all nodes in schema database/contacts
 $db->delNodes();
@@ -31,10 +30,9 @@ $db->setNode($id, array(
 // Retrieve a node from schema database/contacts
 $contact = $db->getNode($id);
 
-echo "Name: " . $contact['name'] . " <br/>\n";
-echo "Phone: " . $contact['phone'] . " <br/>\n";
-echo "Email: " . $contact['email'] . " <br/>\n";
+echo "Name: {$contact['name']} <br/>\n";
+echo "Phone: {$contact['phone']} <br/>\n";
+echo "Email: {$contact['email']} <br/>\n";
 
 // Remove node
-
 $db->delNode($id);
