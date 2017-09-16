@@ -5,10 +5,10 @@
  *
  * This is a example for entities
  *
- * @author Rafa Rodriguez <rafacuba2015@gmail.com>
+ * @author Rafa Rodriguez [@rafageist] <rafageis@hotmail.com>
  *        
  */
-include "../divNoSQL.php";
+include "../divNodes.php";
 
 // Your entity
 class Person {

@@ -1,6 +1,6 @@
 {
-    "name": "divengine/divNoSQL",
-    "description": "PHP No-SQL Databse System",
+    "name": "divengine/divNodes",
+    "description": "No-SQL Database System for PHP",
     "require": {
 		"php": ">=5.3.0"
     }

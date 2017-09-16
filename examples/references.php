@@ -5,10 +5,10 @@
  *
  * References example
  *
- * @author Rafa Rodriguez <rafacuba2015@gmail.com>
+ * @author Rafa Rodriguez [@rafageist] <rafageis@hotmail.com>
  *        
  */
-include "../../divNoSQL.php";
+include "../divNodes.php";
 
 // Adding a schema on the fly if not exists
 $db = new divNodes("database/companies");

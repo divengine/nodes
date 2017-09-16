@@ -5,7 +5,7 @@
  *
  * This is a basic example of divNoSQL that demonstrates their main functionalities.
  *
- * @author Rafa Rodriguez [@rafageist] <rafageis@hotmail.com>
+ * @author Rafa Rodriguez [@rafageist] <rafageist@hotmail.com>
  */
 include "../divNodes.php";
 
@@ -16,23 +16,40 @@ $db = new divNodes("database/contacts");
 $db->delNodes();
 
 // Add node into schema database/contacts
-$id = $db->addNode(array(
-		"name" => "Peter",
-		"age" => 25
-));
+$id = $db->addNode([
+	"name" => "Peter",
+	"age" => 25
+]);
 
 // Change data of node
-$db->setNode($id, array(
-		"email" => "peter@email.com",
-		"phone" => "+1222553335"
+$db->setNode($id, [
+	"email" => "peter@email.com",
+	"phone" => "+1222553335"
+]);
+
+$id = $db->addNode(array(
+	"name" => "John",
+	"age" => 15
 ));
 
 // Retrieve a node from schema database/contacts
 $contact = $db->getNode($id);
 
-echo "Name: {$contact['name']} <br/>\n";
-echo "Phone: {$contact['phone']} <br/>\n";
-echo "Email: {$contact['email']} <br/>\n";
+$db->forEachNode(function(&$contact, $id, &$db){
+
+	if ($contact['age'] < 20)
+		return DIV_NODES_FOR_CONTINUE_DISCARDING;
+
+	if ( ! isset($contact['visitors']))
+		$contact['visitors'] = 0;
+
+	$contact['visitors']++;
+
+	echo "Name: {$contact['name']} <br/>\n";
+	echo "Phone: {$contact['phone']} <br/>\n";
+	echo "Email: {$contact['email']} <br/>\n";
+	echo "Visitors: {$contact['visitors']} <br/>\n";
+});
 
 // Remove node
 $db->delNode($id);

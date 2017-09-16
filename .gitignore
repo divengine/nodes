@@ -3,3 +3,4 @@
 .project
 .htpasswd
 .idea/*
+examples/database/*
