@@ -17,7 +17,7 @@ $db->delNodes();
 
 // Add node into schema database/contacts
 $id = $db->addNode([
-	"name" => "Peter",
+	"name" => "Peter Nash",
 	"age" => 25
 ]);
 
@@ -28,14 +28,15 @@ $db->setNode($id, [
 ]);
 
 $id = $db->addNode(array(
-	"name" => "John",
+	"name" => "John Nash",
 	"age" => 15
 ));
 
 // Retrieve a node from schema database/contacts
 $contact = $db->getNode($id);
 
-$db->forEachNode(function(&$contact, $id, &$db){
+// Iterate each node with age < 20
+$db->forEachNode(function(&$contact, $id, $schema, $db){
 
 	if ($contact['age'] < 20)
 		return DIV_NODES_FOR_CONTINUE_DISCARDING;
@@ -49,7 +50,26 @@ $db->forEachNode(function(&$contact, $id, &$db){
 	echo "Phone: {$contact['phone']} <br/>\n";
 	echo "Email: {$contact['email']} <br/>\n";
 	echo "Visitors: {$contact['visitors']} <br/>\n";
+	echo "\n";
 });
 
-// Remove node
+// Drop index
+$db->delSchema('database/contacts/.index');
+
+// Create index (in the default location) for full text search
+$db->createIndex(function($node)
+{
+	return $node['name'];
+});
+
+// Full text search with 'jo nas' phrase
+$results = $db->search("jo nas");
+
+foreach ($results as $result)
+{
+	$node = $db->getNode($result['id'], $result['schema']);
+	echo "[{$result['score']}] - " . $node['name'] . "\n";
+}
+
+// Remove node in current schema
 $db->delNode($id);

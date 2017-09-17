@@ -195,7 +195,7 @@ class divNodes
 					}
 					else
 					{
-						if($entry != ".locks" && $entry != ".references")
+						if($entry != ".locks" && $entry != ".references" && $entry != ".index")
 						{
 							$this->delNode($entry, $schema);
 						}
@@ -304,7 +304,9 @@ class divNodes
 						$node = $this->getNode($fid, $rel['schema']);
 
 						$restore[] = [
-							"node" => $node, "id" => $fid, "schema" => $rel['schema']
+							"node" => $node,
+							"id" => $fid,
+							"schema" => $rel['schema']
 						];
 
 						$delete_node = false;
@@ -582,7 +584,7 @@ class divNodes
 		{
 			if( ! is_dir(DIV_NODES_ROOT . $schema . "/$entry"))
 			{
-				if($entry != ".references" && $entry != ".locks")
+				if($entry != '.references' && $entry != '.locks' && $entry != '.index')
 				{
 					$list[] = $entry;
 				}
@@ -982,7 +984,12 @@ class divNodes
 		}
 
 		$dp = [
-			"where" => "true", "offset" => 0, "limit" => - 1, "fields" => "*", "order" => null, "order_asc" => true
+			"where" => "true",
+			"offset" => 0,
+			"limit" => - 1,
+			"fields" => "*",
+			"order" => null,
+			"order_asc" => true
 		];
 
 		$params = self::cop($dp, $params);
@@ -1178,7 +1185,9 @@ class divNodes
 		}
 
 		$dp     = [
-			"where" => "true", "offset" => 0, "limit" => - 1
+			"where" => "true",
+			"offset" => 0,
+			"limit" => - 1
 		];
 		$params = self::cop($dp, $params);
 
@@ -1288,7 +1297,9 @@ class divNodes
 	public function addReference($params = [])
 	{
 		$dp     = [
-			"schema" => $this->schema, "foreign_schema" => $this->schema, "update_cascade" => true,
+			"schema" => $this->schema,
+			"foreign_schema" => $this->schema,
+			"update_cascade" => true,
 			"delete_cascade" => true
 		];
 		$params = self::cop($dp, $params);
@@ -1340,7 +1351,9 @@ class divNodes
 	public function delReference($params = [])
 	{
 		$dp = [
-			"schema" => $this->schema, "foreign_schema" => $this->schema, "update_cascade" => true,
+			"schema" => $this->schema,
+			"foreign_schema" => $this->schema,
+			"update_cascade" => true,
 			"delete_cascade" => true
 		];
 
@@ -1389,8 +1402,9 @@ class divNodes
 	 *
 	 * @param closure $closure
 	 * @param string  $schema
+	 * @param array   $otherData
 	 */
-	public function forEachNode($closure, $schema = null)
+	public function forEachNode($closure, $schema = null, $otherData = [])
 	{
 		if(is_null($schema)) $schema = $this->schema;
 
@@ -1398,12 +1412,12 @@ class divNodes
 		{
 			while(($file = readdir($dir)) !== false)
 			{
-				if($file != ".references" && $file != ".locks")
+				if($file != ".references" && $file != ".locks" && $file != ".index" && $file != "." && $file != "..")
 				{
 					$node = $this->getNode($file, $schema);
 					$md5  = md5(serialize($node));
 
-					$result = $closure($node, $file, $this);
+					$result = $closure($node, $file, $schema, $this, $otherData);
 
 					if($result == DIV_NODES_FOR_BREAK) break;
 					if($result == DIV_NODES_FOR_CONTINUE_DISCARDING) continue;
@@ -1416,5 +1430,189 @@ class divNodes
 			}
 			closedir($dir);
 		}
+	}
+
+	/**
+	 * Get words from content
+	 *
+	 * @param mixed  $content
+	 * @param string $chars
+	 *
+	 * @return array
+	 */
+	public function getWords($content, $chars = ' abcdefghijklmnopqrstuvwxyz1234567890')
+	{
+		$content = "$content";
+
+		$l = strlen($content);
+
+		$new_content = '';
+		for($i = 0; $i < $l; $i ++) if(stripos($chars, $content[ $i ]) !== false) $new_content .= $content[ $i ];
+		else $new_content .= ' ';
+
+		$new_content = trim(strtolower($new_content));
+
+		while(strpos($new_content, '  ') !== false) $new_content = str_replace('  ', ' ', $new_content);
+
+		$words = explode(' ', $new_content);
+
+		$new_words = [];
+		foreach($words as $word) $new_words[ $word ] = $word;
+
+		return $new_words;
+	}
+
+	/**
+	 * Add index of node
+	 *
+	 * @param array  $words
+	 * @param scalar $nodeId
+	 * @param string $schema
+	 * @param null   $indexSchema
+	 */
+	public function addIndex($words, $nodeId, $schema = null, $indexSchema = null)
+	{
+		if(is_null($schema)) $schema = $this->schema;
+		if(is_null($indexSchema)) $indexSchema = $schema . '/.index';
+
+		$this->addSchema($indexSchema);
+
+		$pathToNode = "$schema/$nodeId";
+		$id         = md5($pathToNode);
+
+		foreach($words as $word)
+		{
+			$l          = strlen($word);
+			$wordSchema = '';
+			for($i = 0; $i < $l; $i ++) $wordSchema .= $word[ $i ] . '/';
+
+			$wordSchema = "$indexSchema/$wordSchema";
+
+			$this->addSchema($wordSchema);
+
+			$node = $this->getNode($id, $wordSchema, [
+				"schema" => $schema,
+				"id" => $nodeId,
+				"path" => $pathToNode,
+				"last_update" => date("Y-m-d h:i:s")
+			]);
+
+			$this->addNode($node, $id, $wordSchema);
+		}
+	}
+
+	/**
+	 * Create index of schema
+	 *
+	 * @param closure $contentExtractor
+	 * @param string  $schema
+	 * @param string  $indexSchema
+	 */
+	public function createIndex($contentExtractor = null, $schema = null, $indexSchema = null)
+	{
+		if(is_null($contentExtractor)) $contentExtractor = function($node, $nodeId)
+		{
+			$content = '';
+
+			if(is_object($node))
+			{
+				if(method_exists($node, '__toContent')) $content = $node->__toContent();
+				elseif(method_exists($node, '__toString')) $content = "$node";
+			}
+			elseif(is_scalar($node)) $content = "$node";
+
+			return $content;
+		};
+
+		// indexing each node
+		$this->forEachNode(function($node, $nodeId, $schema, divNodes $db, $otherData)
+		{
+
+			$contentExtractor = $otherData['contentExtractor'];
+			$indexSchema      = $otherData['indexSchema'];
+			$words            = [];
+			$extract_words    = true;
+
+			// extract words from built-in node method
+			if(is_object($node))
+			{
+				if(method_exists($node, '__toWords'))
+				{
+					$extract_words = false;
+					$words         = $node->__toWords();
+				}
+			}
+
+			// get content
+			$content = $contentExtractor($node, $nodeId);
+
+			// extract words
+			if($extract_words && count($words) == 0) $words = $db->getWords($content);
+
+			$db->addIndex($words, $nodeId, $schema, $indexSchema);
+
+		}, $schema, [
+			'indexSchema' => $indexSchema,
+			'contentExtractor' => $contentExtractor
+		]);
+	}
+
+	/**
+	 * Full text search
+	 *
+	 * @param string $phrase
+	 * @param string $indexSchema
+	 * @param int    $offset
+	 * @param int    $limit
+	 *
+	 * @return array
+	 */
+	public function search($phrase, $indexSchema = null, $offset = 0, $limit = - 1)
+	{
+		if(is_null($indexSchema)) $indexSchema = $this->schema . '/.index';
+
+		$results = [];
+		$words   = $this->getWords($phrase);
+
+		foreach($words as $word)
+		{
+			// build schema from word
+			$l      = strlen($word);
+			$schema = '';
+
+			for($i = 0; $i < $l; $i ++) $schema .= $word[ $i ] . "/";
+
+			$schema = "$indexSchema/$schema";
+
+			if($this->existsSchema($schema))
+			{
+				// get indexes
+				$schemas = $this->getRecursiveNodes($schema, [], [], $offset, $limit);
+
+				// calculate score
+				foreach($schemas as $sch => $nodes) foreach($nodes as $node)
+				{
+					$id = md5($node['path']);
+
+					if( ! isset($results[ $id ]))
+					{
+						$node['score']  = 0;
+						$results[ $id ] = $node;
+					}
+
+					$results[ $id ]['score'] ++;
+				}
+			}
+		}
+
+		// sort results
+		uasort($results, function($a, $b)
+		{
+			if($a['score'] == $b['score']) return 0;
+
+			return $a['score'] > $b['score'] ? - 1 : 1;
+		});
+
+		return $results;
 	}
 }
