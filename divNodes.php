@@ -21,8 +21,8 @@
  * along with this program as the file LICENSE.txt; if not, please see
  * http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
  *
- * @author  Rafa Rodriguez <rafageist@hotmail.com>
- * @version 1.2
+ * @author  Rafa Rodriguez [@rafageist] <rafageist@hotmail.com>
+ * @version 1.3
  * @link    http://github.com/divengine/divNodes
  */
 
