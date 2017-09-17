@@ -1,8 +1,11 @@
 ----------------------------
 Sep 16, 2017
 ----------------------------
-- forEach method
-- get nodes recursively
+- forEachNode method
+- Get nodes recursively
+- Index nodes for full text search
+- New method for full text search
+- Realease 1.3 version
 
 ----------------------------
 Feb 22, 2016
@@ -12,7 +15,7 @@ Feb 22, 2016
 ----------------------------
 January 29, 2016
 ----------------------------
-- rename the project
+- Rename the project
 
 ----------------------------
 December 29, 2015
@@ -22,4 +25,4 @@ December 29, 2015
 ----------------------------
 October 21,  2014
 ----------------------------
-- Allow to retrieve data from array to phpDBFastEntity
+- Allow to retrieve data from array to old class phpDBFastEntity [obsolete]
