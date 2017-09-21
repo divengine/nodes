@@ -1,6 +1,5 @@
-# divNodes 1.3  
+# Div PHP Nodes 1.3  
 No-SQL Database System for PHP
- 
 
 Library for storage relational and serialized data 
 using only PHP. The database can be divided into schemas. 
@@ -64,5 +63,11 @@ $contact = $db->getNode($id);
 
 $db->delNode($id);
 ```
+
+# Creating a index of nodes
+```php
+
+```
+# Searching
 
 For more details you can see the examples.

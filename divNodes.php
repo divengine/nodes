@@ -597,8 +597,9 @@ class divNodes
 	/**
 	 * Return a node
 	 *
-	 * @param scalar $id
+	 * @param mixed  $id
 	 * @param string $schema
+	 * @param mixed  $default
 	 *
 	 * @return mixed
 	 */
@@ -608,6 +609,7 @@ class divNodes
 		{
 			$schema = $this->schema;
 		}
+
 		if(file_exists(DIV_NODES_ROOT . $schema . "/$id") && is_file(DIV_NODES_ROOT . $schema . "/$id"))
 		{
 			$data = file_get_contents(DIV_NODES_ROOT . $schema . "/$id");
@@ -616,7 +618,9 @@ class divNodes
 		{
 			return $default;
 		}
+
 		$sec = 0;
+
 		while($this->isLockNode($id, $schema) || $sec > 999999)
 		{
 			$sec ++;

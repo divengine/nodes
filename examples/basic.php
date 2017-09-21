@@ -1,16 +1,26 @@
 <?php
 
 /**
- * divNoSQL
+ * Div PHP Nodes
  *
- * This is a basic example of divNoSQL that demonstrates their main functionalities.
+ * Example
  *
  * @author Rafa Rodriguez [@rafageist] <rafageist@hotmail.com>
  */
+
 include "../divNodes.php";
 
 // Adding a schema on the fly if not exists
 $db = new divNodes("database/contacts");
+
+// Simple enums with PHP
+class Enums {
+	static public $cities = [
+		'NY' => 'New York',
+		'FL' => 'Florida',
+		'HV' => 'Havana'
+	];
+}
 
 // Deleting all nodes in schema database/contacts
 $db->delNodes();
@@ -18,7 +28,8 @@ $db->delNodes();
 // Add node into schema database/contacts
 $id = $db->addNode([
 	"name" => "Peter Nash",
-	"age" => 25
+	"age" => 25,
+	"city" => 'NY'
 ]);
 
 // Change data of node
@@ -29,7 +40,8 @@ $db->setNode($id, [
 
 $id = $db->addNode(array(
 	"name" => "John Nash",
-	"age" => 15
+	"age" => 15,
+	"city" => 'FL'
 ));
 
 // Retrieve a node from schema database/contacts
@@ -70,6 +82,18 @@ foreach ($results as $result)
 	$node = $db->getNode($result['id'], $result['schema']);
 	echo "[{$result['score']}] - " . $node['name'] . "\n";
 }
+
+// Create index of object's property
+$idxCity = 'database/index/contacts/city';
+$db->createIndex(function($node){
+	if (isset($node['city']))
+		return $node['city'];
+	return 'unknown';
+}, null, $idxCity);
+
+$people_of_ny= $db->search('NY', $idxCity);
+
+var_dump($people_of_ny);
 
 // Remove node in current schema
 $db->delNode($id);
