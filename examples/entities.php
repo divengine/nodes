@@ -1,13 +1,14 @@
 <?php
 
 /**
- * divNoSQL
+/**
+ * Div PHP Nodes
  *
- * This is a example for entities
+ * Example
  *
- * @author Rafa Rodriguez [@rafageist] <rafageis@hotmail.com>
- *        
+ * @author Rafa Rodriguez [@rafageist] <rafageist@hotmail.com>
  */
+
 include "../divNodes.php";
 
 // Your entity
