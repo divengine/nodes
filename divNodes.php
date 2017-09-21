@@ -195,7 +195,7 @@ class divNodes
 					}
 					else
 					{
-						if($entry != ".locks" && $entry != ".references" && $entry != ".index")
+						if($entry != ".references" && $entry != ".index")
 						{
 							$this->delNode($entry, $schema);
 						}
@@ -203,10 +203,7 @@ class divNodes
 				}
 			}
 
-			if(file_exists(DIV_NODES_ROOT . $schema . "/.locks"))
-			{
-				unlink(DIV_NODES_ROOT . $schema . "/.locks");
-			}
+			if(file_exists(DIV_NODES_ROOT . $schema . "/.locks")) unlink(DIV_NODES_ROOT . $schema . "/.locks");
 
 			// Remove orphan references
 			$references = $this->getReferences($schema);
@@ -394,93 +391,31 @@ class divNodes
 	/**
 	 * Know if node are lock
 	 *
-	 * @param scalar $id
+	 * @param mixed  $id
 	 * @param string $schema
 	 *
 	 * @return boolean
 	 */
 	public function isLockNode($id, $schema = null)
 	{
-		if(is_null($schema))
-		{
-			$schema = $this->schema;
-		}
-
-		if( ! $this->existsSchema($schema))
-		{
-			return false;
-		}
-
-		if( ! file_exists(DIV_NODES_ROOT . $schema . "/" . $id))
-		{
-			return false;
-		}
-
-		$blocked = $this->getLocks($schema);
-
-		return isset($blocked[ $id ]);
+		return file_exists(DIV_NODES_ROOT . $schema . "/" . $id . ".lock");
 	}
 
-	/**
-	 * Get list of lock nodes
-	 *
-	 * @param string $schema
-	 *
-	 * @return array
-	 */
-	private function getLocks($schema = null)
-	{
-		if(is_null($schema))
-		{
-			$schema = $this->schema;
-		}
-
-		if( ! $this->existsSchema($schema))
-		{
-			return false;
-		}
-
-		$path = DIV_NODES_ROOT . $schema . "/.locks";
-		if( ! file_exists($path))
-		{
-			file_put_contents($path, serialize([]));
-		}
-		$data = file_get_contents($path);
-
-		return unserialize($data);
-	}
 
 	/**
 	 * Lock a node
 	 *
-	 * @param scalar $id
+	 * @param mixed  $id
 	 * @param string $schema
 	 *
 	 * @return boolean
 	 */
 	private function lockNode($id, $schema = null)
 	{
-		if(is_null($schema))
-		{
-			$schema = $this->schema;
-		}
-		if( ! $this->existsSchema($schema))
-		{
-			return false;
-		}
+		if(is_null($schema)) $schema = $this->schema;
+		$r = @file_put_contents(DIV_NODES_ROOT . $schema . "/" . $id . ".lock", '');
 
-		if( ! file_exists(DIV_NODES_ROOT . $schema . "/" . $id))
-		{
-			return false;
-		}
-
-		$blocked        = $this->getLocks($schema);
-		$blocked[ $id ] = true;
-		$path           = DIV_NODES_ROOT . $schema . "/" . ".locks";
-
-		file_put_contents($path, serialize($blocked));
-
-		return true;
+		return $r !== false;
 	}
 
 	public function triggerBeforeDel($id, $schema)
@@ -498,36 +433,9 @@ class divNodes
 	 */
 	private function unlockNode($id, $schema = null)
 	{
-		if(is_null($schema))
-		{
-			$schema = $this->schema;
-		}
-		if( ! $this->existsSchema($schema))
-		{
-			return false;
-		}
+		if(is_null($schema)) $schema = $this->schema;
 
-		$blocked = $this->getLocks($schema);
-
-		if(isset($blocked[ $id ]))
-		{
-			unset($blocked[ $id ]);
-		}
-
-		$path   = DIV_NODES_ROOT . $schema . "/.locks";
-		$nlocks = [];
-
-		foreach($blocked as $lock)
-		{
-			if(file_exists(DIV_NODES_ROOT . $schema . "/$lock") && $id != $lock)
-			{
-				$nlocks[] = $lock;
-			}
-		}
-
-		file_put_contents($path, serialize($nlocks));
-
-		return true;
+		return @unlink(DIV_NODES_ROOT . $schema . '/' . $id . '.lock');
 	}
 
 	/**
@@ -539,10 +447,7 @@ class divNodes
 	 */
 	public function getReferences($schema = null)
 	{
-		if(is_null($schema))
-		{
-			$schema = $this->schema;
-		}
+		if(is_null($schema)) $schema = $this->schema;
 
 		if( ! $this->existsSchema($schema))
 		{
@@ -580,11 +485,12 @@ class divNodes
 
 		$list = [];
 		$dir  = scandir(DIV_NODES_ROOT . $schema);
+
 		foreach($dir as $entry)
 		{
 			if( ! is_dir(DIV_NODES_ROOT . $schema . "/$entry"))
 			{
-				if($entry != '.references' && $entry != '.locks' && $entry != '.index')
+				if($entry != '.references' && $entry != '.index')
 				{
 					$list[] = $entry;
 				}
@@ -605,26 +511,17 @@ class divNodes
 	 */
 	public function getNode($id, $schema = null, $default = null)
 	{
-		if(is_null($schema))
-		{
-			$schema = $this->schema;
-		}
+		if(is_null($schema)) $schema = $this->schema;
 
-		if(file_exists(DIV_NODES_ROOT . $schema . "/$id") && is_file(DIV_NODES_ROOT . $schema . "/$id"))
-		{
-			$data = file_get_contents(DIV_NODES_ROOT . $schema . "/$id");
-		}
-		else
-		{
-			return $default;
-		}
+		// read pure data
+		$data = @file_get_contents(DIV_NODES_ROOT . $schema . "/$id");
+		if($data === false) return $default;
 
+		// wait for unlocked
 		$sec = 0;
+		while($this->isLockNode($id, $schema) || $sec > 999999) $sec ++;
 
-		while($this->isLockNode($id, $schema) || $sec > 999999)
-		{
-			$sec ++;
-		}
+		// lock and load
 		$this->lockNode($id, $schema);
 		$node = unserialize($data);
 		$this->unlockNode($id, $schema);
@@ -801,20 +698,14 @@ class divNodes
 	 * @param scalar $id
 	 * @param string $schema
 	 *
-	 * @return scalar
+	 * @return mixed
 	 */
 	public function addNode($node, $id = null, $schema = null)
 	{
-		if(is_null($schema))
-		{
-			$schema = $this->schema;
-		}
-		if(is_null($id))
-		{
-			$id = date("Ymdhis") . uniqid();
-		}
+		if(is_null($schema)) $schema = $this->schema;
+		if(is_null($id)) $id = date("Ymdhis") . uniqid();
 
-		if($id == ".references" || $id == ".locks")
+		if($id == ".references")
 		{
 			self::log("Invalid ID '$id' for node");
 
@@ -823,10 +714,7 @@ class divNodes
 
 		$node = $this->triggerBeforeAdd($node, $id, $schema);
 
-		if($node == false)
-		{
-			return false;
-		}
+		if($node == false) return false;
 
 		$data = serialize($node);
 
@@ -873,7 +761,7 @@ class divNodes
 	 */
 	public function getRecursiveNodes($schema = "/", $paramsBySchema = [], $paramsDefault = [], $offset = 0, $limit = - 1, $onlyIds = false)
 	{
-		$schemas = [$schema];
+		$schemas = [$schema => $schema];
 		$schemas = array_merge($schemas, $this->getSchemas($schema));
 
 		$nodes = [];
@@ -888,10 +776,7 @@ class divNodes
 
 			$list = $this->getNodes($params, $schema, true);
 
-			if($list !== false)
-			{
-				$nodes[ $schema ] = $list;
-			}
+			if($list !== false) $nodes[ $schema ] = $list;
 		}
 
 		// limit result
@@ -900,28 +785,26 @@ class divNodes
 		$c    = 0;
 		foreach($nodes as $schema => $ids)
 		{
-			foreach($ids as $id)
+			foreach($ids as $id) if($i >= $offset)
 			{
-				if($i >= $offset)
+				if($c < $limit || $limit == - 1)
 				{
-					if($c < $limit || $limit == - 1)
+					if( ! isset($list[ $schema ]))
 					{
-						if( ! isset($list[ $schema ]))
-						{
-							$list[ $schema ] = [];
-						}
-						if( ! $onlyIds)
-						{
-							$list[ $schema ][ $id ] = $this->getNode($id, $schema);
-						}
-						else
-						{
-							$list[ $schema ][ $id ] = $id;
-						}
-						$c ++;
+						$list[ $schema ] = [];
 					}
+					if( ! $onlyIds)
+					{
+						$list[ $schema ][ $id ] = $this->getNode($id, $schema);
+					}
+					else
+					{
+						$list[ $schema ][ $id ] = $id;
+					}
+					$c ++;
 				}
 			}
+
 			$i ++;
 		}
 
@@ -941,7 +824,7 @@ class divNodes
 
 		if($this->existsSchema($from))
 		{
-			$schemas[] = $from;
+			$schemas[ $from ] = $from;
 
 			$stack = [$from => $from];
 
@@ -957,8 +840,8 @@ class divNodes
 
 					if($entry != '.' && $entry != '..' && ! is_file(DIV_NODES_ROOT . $fullSchema))
 					{
-						$stack[ $fullSchema ] = $fullSchema;
-						$schemas[]            = $fullSchema;
+						$stack[ $fullSchema ]   = $fullSchema;
+						$schemas[ $fullSchema ] = $fullSchema;
 					}
 				}
 			}
@@ -973,22 +856,14 @@ class divNodes
 	 * @param array  $params
 	 * @param string $schema
 	 *
-	 * @return array
+	 * @return mixed
 	 */
 	public function getNodes($params = [], $schema = null, $onlyIds = false)
 	{
-		if(is_null($schema))
-		{
-			$schema = $this->schema;
-		}
-
-		if( ! $this->existsSchema($schema))
-		{
-			return false;
-		}
+		if(is_null($schema)) $schema = $this->schema;
+		if( ! $this->existsSchema($schema)) return false;
 
 		$dp = [
-			"where" => "true",
 			"offset" => 0,
 			"limit" => - 1,
 			"fields" => "*",
@@ -1001,9 +876,9 @@ class divNodes
 
 		// get result
 		$newIds = [];
+
 		foreach($ids as $id)
 		{
-
 			$node = $this->getNode($id, $schema);
 
 			$vars = [];
@@ -1019,63 +894,65 @@ class divNodes
 			{
 				$vars = ['value' => $node];
 			}
-			$w = $params['where'];
 
-			foreach($vars as $key => $value)
+			$r = true;
+			if(isset($params['where']))
 			{
-				$w = str_replace('{' . $key . '}', '$vars["' . $key . '"]', $w);
+
+				$w = $params['where'];
+
+				foreach($vars as $key => $value)
+				{
+					$w = str_replace('{' . $key . '}', '$vars["' . $key . '"]', $w);
+				}
+
+				$w = str_replace('{id}', '$id', $w);
+
+				$r = false;
+				eval('$r = ' . $w . ';');
 			}
 
-			$w = str_replace('{id}', '$id', $w);
-
-			$r = false;
-			eval('$r = ' . $w . ';');
 
 			if($r === true)
 			{
-				/*if (is_object($node) || is_array($node)) {
-					$fields = explode(",", $params['fields']);
-					foreach ($fields as $key => $value) $fields[$value] = true;
-					foreach ($vars as $key => $value)
-						if (! isset($fields[$key]) && ! isset($fields['*'])) {
-							if (is_object($node)) unset($node->$key);
-							elseif (is_array($node)) unset($node[$key]);
-						}
-				}*/
 
 				$newIds[] = $id;
 			}
 		}
 
 		// sort results
-		$order = $params['order'];
-
-		if($order !== false && ! is_null($order))
+		if(isset($params['order']))
 		{
-			$sorted = [];
-			foreach($newIds as $id)
-			{
-				$node          = $this->getNode($id, $schema);
-				$sorted[ $id ] = $node;
-				if(is_object($node) && isset($node->$order))
-				{
-					$sorted[ $id ] = $node->$order;
-				}
-				if(is_array($node) && isset($node[ $order ]))
-				{
-					$sorted[ $id ] = $node[ $order ];
-				}
-			}
+			$order = $params['order'];
 
-			if(asort($sorted))
+			if($order !== false && ! is_null($order))
 			{
-				if($params['order_asc'] === false)
+				$sorted = [];
+				foreach($newIds as $id)
 				{
-					$sorted = array_reverse($sorted);
+					$node          = $this->getNode($id, $schema);
+					$sorted[ $id ] = $node;
+					if(is_object($node) && isset($node->$order))
+					{
+						$sorted[ $id ] = $node->$order;
+					}
+					if(is_array($node) && isset($node[ $order ]))
+					{
+						$sorted[ $id ] = $node[ $order ];
+					}
 				}
-				$newIds = $sorted;
+
+				if(asort($sorted))
+				{
+					if($params['order_asc'] === false)
+					{
+						$sorted = array_reverse($sorted);
+					}
+					$newIds = $sorted;
+				}
 			}
 		}
+
 
 		// limit result
 		$list = [];
@@ -1416,7 +1293,7 @@ class divNodes
 		{
 			while(($file = readdir($dir)) !== false)
 			{
-				if($file != ".references" && $file != ".locks" && $file != ".index" && $file != "." && $file != "..")
+				if($file != ".references" && $file != ".index" && $file != "." && $file != "..")
 				{
 					$node = $this->getNode($file, $schema);
 					$md5  = md5(serialize($node));
@@ -1576,7 +1453,9 @@ class divNodes
 		if(is_null($indexSchema)) $indexSchema = $this->schema . '/.index';
 
 		$results = [];
-		$words   = $this->getWords($phrase);
+
+		$words = $this->getWords($phrase);
+
 
 		foreach($words as $word)
 		{
