@@ -1,4 +1,10 @@
 ----------------------------
+Sep 20, 2017
+----------------------------
+- change method for lock node
+- better performance fixes
+- improve the examples
+----------------------------
 Sep 16, 2017
 ----------------------------
 - forEachNode method
