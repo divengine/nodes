@@ -1,6 +1,6 @@
 {
   "name": "divengine/div-nodes",
-  "description": "No-SQL Database System for PHP written in PHP",
+  "description": "Div PHP Nodes is a No-SQL Database System for PHP written in PHP",
   "keywords": [
     "no-sql", "database", "storage", "serialization"
   ],
