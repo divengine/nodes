@@ -532,7 +532,7 @@ class divNodes
 	/**
 	 * Update data of a node
 	 *
-	 * @param scalar $id
+	 * @param mixed  $id
 	 * @param mixed  $data
 	 * @param string $schema
 	 *
@@ -1378,7 +1378,21 @@ class divNodes
 				"last_update" => date("Y-m-d h:i:s")
 			]);
 
-			$this->addNode($node, $id, $wordSchema);
+			if($this->existsNode($id, $wordSchema)) $this->setNode($id, $node, $wordSchema);
+			else
+				$this->addNode($node, $id, $wordSchema);
+
+			// save reverse index
+			$node = $this->getNode("$nodeId.idx", $schema, [
+				"indexes" => [],
+				"last_update" => date("Y-m-d h:i:s")
+			]);
+
+			$node['indexes'][$wordSchema] = $id;
+
+			if($this->existsNode("$nodeId.idx", $schema)) $this->setNode("$nodeId.idx", $node, $schema);
+			else
+				$this->addNode($node, "$nodeId.idx", $schema);
 		}
 	}
 
