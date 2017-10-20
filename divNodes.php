@@ -1307,6 +1307,10 @@ class divNodes
 		{
 			while(($file = readdir($dir)) !== false)
 			{
+				$full_path = DIV_NODES_ROOT . $schema . "/" . $file;
+
+				if(pathinfo($full_path, PATHINFO_EXTENSION) == "idx" && file_exists(substr($full_path, 0, strlen($full_path) - 4))) continue;
+
 				if( ! $this->isReservedId($file) && $file != "." && $file != "..")
 				{
 					$node = $this->getNode($file, $schema);
@@ -1547,6 +1551,7 @@ class divNodes
 	 * Re-write stats of schema
 	 *
 	 * @param null $schema
+	 *
 	 * @return array
 	 */
 	public function reStats($schema = null)
