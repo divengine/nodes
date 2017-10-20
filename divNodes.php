@@ -60,6 +60,18 @@ class divNodes
 	}
 
 	/**
+	 * Protect some IDs in schemas
+	 *
+	 * @param $id
+	 *
+	 * @return bool
+	 */
+	protected final function isReservedId($id)
+	{
+		return $id == '.references' || $id == '.index' || $id == '.stats';
+	}
+
+	/**
 	 * Set the schema of work
 	 *
 	 * @param string $schema
@@ -195,7 +207,7 @@ class divNodes
 					}
 					else
 					{
-						if($entry != ".references" && $entry != ".index")
+						if( ! $this->isReservedId($entry))
 						{
 							$this->delNode($entry, $schema);
 						}
@@ -491,7 +503,7 @@ class divNodes
 			$full_path = DIV_NODES_ROOT . $schema . "/$entry";
 			if( ! is_dir($full_path))
 			{
-				if($entry != '.references' && $entry != '.index')
+				if( ! $this->isReservedId($entry))
 				{
 					if(pathinfo($full_path, PATHINFO_EXTENSION) == "idx" && file_exists(substr($full_path, 0, strlen($full_path) - 4))) continue;
 					$list[] = $entry;
@@ -707,7 +719,7 @@ class divNodes
 		if(is_null($schema)) $schema = $this->schema;
 		if(is_null($id)) $id = date("Ymdhis") . uniqid();
 
-		if($id == ".references")
+		if($this->isReservedId($id))
 		{
 			self::log("Invalid ID '$id' for node");
 
@@ -1287,7 +1299,7 @@ class divNodes
 	 * @param string  $schema
 	 * @param array   $otherData
 	 */
-	public function forEachNode($closure, $schema = null, $otherData = [])
+	public function forEachNode($closure, $schema = null, &$otherData = [])
 	{
 		if(is_null($schema)) $schema = $this->schema;
 
@@ -1295,7 +1307,7 @@ class divNodes
 		{
 			while(($file = readdir($dir)) !== false)
 			{
-				if($file != ".references" && $file != ".index" && $file != "." && $file != "..")
+				if( ! $this->isReservedId($file) && $file != "." && $file != "..")
 				{
 					$node = $this->getNode($file, $schema);
 					$md5  = md5(serialize($node));
@@ -1513,5 +1525,47 @@ class divNodes
 		});
 
 		return $results;
+	}
+
+	/**
+	 * Return the stats of schema
+	 *
+	 * @param null $schema
+	 *
+	 * @return array|mixed
+	 */
+	public function getStats($schema = null)
+	{
+		$stats = $this->getNode(".stats", $schema, null);
+
+		if(is_null($stats)) $stats = $this->reStats($schema);
+
+		return $stats;
+	}
+
+	/**
+	 * Re-write stats of schema
+	 *
+	 * @param null $schema
+	 * @return array
+	 */
+	public function reStats($schema = null)
+	{
+		$stats = [
+			'count' => 0
+		];
+
+		// 'count' stat
+		$this->forEachNode(function($node, $file, $schema, $db, &$stats = [])
+		{
+			$stats['count'] ++;
+
+			return DIV_NODES_FOR_CONTINUE_DISCARDING;
+		}, $schema, $stats);
+
+		// save stat
+		$this->setNode('.stats', $stats, $schema);
+
+		return $stats;
 	}
 }
