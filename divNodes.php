@@ -488,10 +488,12 @@ class divNodes
 
 		foreach($dir as $entry)
 		{
-			if( ! is_dir(DIV_NODES_ROOT . $schema . "/$entry"))
+			$full_path = DIV_NODES_ROOT . $schema . "/$entry";
+			if( ! is_dir($full_path))
 			{
 				if($entry != '.references' && $entry != '.index')
 				{
+					if(pathinfo($full_path, PATHINFO_EXTENSION) == ".idx" && file_exists(substr($full_path, 0, strlen($full_path) - 4))) continue;
 					$list[] = $entry;
 				}
 			}
@@ -1388,7 +1390,7 @@ class divNodes
 				"last_update" => date("Y-m-d h:i:s")
 			]);
 
-			$node['indexes'][$wordSchema] = $id;
+			$node['indexes'][ $wordSchema ] = $id;
 
 			if($this->existsNode("$nodeId.idx", $schema)) $this->setNode("$nodeId.idx", $node, $schema);
 			else
