@@ -493,7 +493,7 @@ class divNodes
 			{
 				if($entry != '.references' && $entry != '.index')
 				{
-					if(pathinfo($full_path, PATHINFO_EXTENSION) == ".idx" && file_exists(substr($full_path, 0, strlen($full_path) - 4))) continue;
+					if(pathinfo($full_path, PATHINFO_EXTENSION) == "idx" && file_exists(substr($full_path, 0, strlen($full_path) - 4))) continue;
 					$list[] = $entry;
 				}
 			}
