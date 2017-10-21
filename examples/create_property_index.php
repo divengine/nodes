@@ -16,13 +16,14 @@ $db = new divNodes("database/contacts");
 // helper function
 function random_name()
 {
-	$word     = '';
-	$cons     = 'bcdfghjklmnpqrstvwxyz';
-	$cons_len = strlen($cons);
+	$word       = '';
+	$cons       = 'bcdfghjklmnpqrstvwxyz';
+	$cons_len   = strlen($cons);
 	$vocals     = 'aeiou';
 	$vocals_len = strlen($vocals);
-	$len = rand(1, 4);
+	$len        = rand(1, 4);
 	for($i = 0; $i < $len; $i ++) $word .= $cons[ rand(0, $cons_len - 1) ] . $vocals[ rand(0, $vocals_len - 1) ];
+
 	return ucfirst($word);
 }
 
@@ -61,8 +62,7 @@ echo "\n\n";
 
 // Show stats
 echo "Populate results:\n";
-foreach($cities as $city_code => $city_name)
-	echo " - $city_name ($city_code) = {$stats[$city_code]} contacts \n";
+foreach($cities as $city_code => $city_name) echo " - $city_name ($city_code) = {$stats[$city_code]} contacts \n";
 echo "-------------------------\n";
 echo "TOTAL = $total \n\n";
 
@@ -80,9 +80,9 @@ foreach($cities as $city_code => $city_name)
 {
 	echo "$city_name ";
 
-	$t1 = microtime(true);
+	$t1     = microtime(true);
 	$people = $db->search($city_code, $idxCity, 0, 10);
-	$t2 = microtime(true);
+	$t2     = microtime(true);
 	echo "(" . number_format($t2 - $t1, 4) . " secs): \n";
 
 	foreach($people as $entry)

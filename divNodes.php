@@ -30,7 +30,6 @@
 if( ! defined("DIV_NODES_ROOT")) define("DIV_NODES_ROOT", "./");
 if( ! defined("DIV_NODES_LOG_FILE")) define("DIV_NODES_LOG_FILE", DIV_NODES_ROOT . "/divNodes.log");
 
-
 define("DIV_NODES_FOR_BREAK", "DIV_NODES_FOR_BREAK");
 define("DIV_NODES_FOR_CONTINUE_SAVING", "DIV_NODES_FOR_CONTINUE_SAVING");
 define("DIV_NODES_FOR_CONTINUE_DISCARDING", "DIV_NODES_FOR_CONTINUE_DISCARDING");
@@ -262,7 +261,7 @@ class divNodes
 	/**
 	 * Remove one node
 	 *
-	 * @param scalar $id
+	 * @param string $id
 	 * @param string $schema
 	 *
 	 * @return boolean
@@ -392,7 +391,29 @@ class divNodes
 
 			// Delete the node
 			unlink($schema . "/$id");
+
+			// Delete indexes
+			$idx_path = $schema . "/$id.idx";
+			if(file_exists($idx_path))
+			{
+				$idx = unserialize(file_get_contents($idx_path));
+
+				if(isset($idx['indexes'])) foreach($idx['indexes'] as $word_schema => $index_id)
+				{
+					$this->delNode($index_id, $word_schema);
+				}
+
+				unlink($schema . "/$id.idx");
+			}
+
 			$this->unlockNode($id, $schema);
+
+			// record stats
+			$full_path = DIV_NODES_ROOT . $schema . "/$id";
+			if( ! (pathinfo($full_path, PATHINFO_EXTENSION) == "idx" && file_exists(substr($full_path, 0, strlen($full_path) - 4))))
+			{
+				$this->changeStats('{count} -= 1', $schema);
+			}
 
 			return true;
 		}
@@ -438,7 +459,7 @@ class divNodes
 	/**
 	 * Unlock a node
 	 *
-	 * @param scalar $id
+	 * @param string $id
 	 * @param string $schema
 	 *
 	 * @return boolean
@@ -730,8 +751,8 @@ class divNodes
 
 		if($node == false) return false;
 
+		// save node
 		$data = serialize($node);
-
 		file_put_contents(DIV_NODES_ROOT . $schema . "/$id", $data);
 
 		$this->lockNode($id, $schema);
@@ -747,6 +768,13 @@ class divNodes
 		}
 
 		$this->unlockNode($id, $schema);
+
+		// record the stats
+		$full_path = DIV_NODES_ROOT . $schema . "/$id";
+		if( ! (pathinfo($full_path, PATHINFO_EXTENSION) == "idx" && file_exists(substr($full_path, 0, strlen($full_path) - 4))))
+		{
+			$this->changeStats('{count} += 1', $schema);
+		}
 
 		return $id;
 	}
@@ -1066,6 +1094,8 @@ class divNodes
 	 *
 	 * @param array  $params
 	 * @param string $schema
+	 *
+	 * @return boolean
 	 */
 	public function delNodes($params = [], $schema = null)
 	{
@@ -1102,6 +1132,8 @@ class divNodes
 				$this->delNode($id, $schema);
 			}
 		}
+
+		return true;
 	}
 
 	/**
@@ -1437,6 +1469,11 @@ class divNodes
 			return $content;
 		};
 
+		$otherData = [
+			'indexSchema' => $indexSchema,
+			'contentExtractor' => $contentExtractor
+		];
+
 		// indexing each node
 		$this->forEachNode(function($node, $nodeId, $schema, divNodes $db, $otherData)
 		{
@@ -1464,10 +1501,7 @@ class divNodes
 
 			$db->addIndex($words, $nodeId, $schema, $indexSchema);
 
-		}, $schema, [
-			'indexSchema' => $indexSchema,
-			'contentExtractor' => $contentExtractor
-		]);
+		}, $schema, $otherData);
 	}
 
 	/**
@@ -1532,6 +1566,16 @@ class divNodes
 	}
 
 	/**
+	 * Default stats structure
+	 *
+	 * @return array
+	 */
+	private function defaultStats()
+	{
+		return ['count' => 0];
+	}
+
+	/**
 	 * Return the stats of schema
 	 *
 	 * @param null $schema
@@ -1548,6 +1592,51 @@ class divNodes
 	}
 
 	/**
+	 * Secure change of stats
+	 *
+	 * @param      $change
+	 * @param null $schema
+	 *
+	 * @return array|mixed
+	 */
+	public function changeStats($change, $schema = null)
+	{
+		if(is_null($schema)) $schema = $this->schema;
+
+		// wait for unlocked
+		$sec = 0;
+		while($this->isLockNode('.stats', $schema) || $sec > 999999) $sec ++;
+
+		// lock stats
+		$this->lockNode('.stats', $schema);
+
+		// read pure data
+		$data = @file_get_contents(DIV_NODES_ROOT . $schema . "/.stats");
+
+		if($data === false) $stats = $this->defaultStats();
+		else
+			$stats = unserialize($data);
+
+		if(is_string($change))
+		{
+			// change stats
+			$expression = $change;
+			foreach($stats as $key => $value) $expression = str_replace('{' . $key . '}', '$stats["' . $key . '"]', $expression);
+			eval($expression . ";");
+		}
+		elseif(is_callable($change))
+		{
+			$change($stats);
+		}
+
+		file_put_contents(DIV_NODES_ROOT . $schema . "/.stats", serialize($stats));
+
+		$this->unlockNode('.stats', $schema);
+
+		return $stats;
+	}
+
+	/**
 	 * Re-write stats of schema
 	 *
 	 * @param null $schema
@@ -1556,9 +1645,7 @@ class divNodes
 	 */
 	public function reStats($schema = null)
 	{
-		$stats = [
-			'count' => 0
-		];
+		$stats = $this->defaultStats();
 
 		// 'count' stat
 		$this->forEachNode(function($node, $file, $schema, $db, &$stats = [])
@@ -1569,7 +1656,10 @@ class divNodes
 		}, $schema, $stats);
 
 		// save stat
-		$this->setNode('.stats', $stats, $schema);
+		$this->delNode('.stats', $schema);
+
+		// no use addNode!
+		file_put_contents(DIV_NODES_ROOT . $schema . "/.stats", serialize($stats));
 
 		return $stats;
 	}
