@@ -45,6 +45,8 @@ class divNodes
 	static $__log_mode = false;
 	static $__log_file = DIV_NODES_LOG_FILE;
 	static $__log_messages = [];
+	static $__version = 1.3;
+
 	var $schema = null;
 
 	/**
@@ -1359,11 +1361,9 @@ class divNodes
 					// default: DIV_NODES_FOR_CONTINUE_SAVING)
 
 					$new_md5 = md5(serialize($node));
-					if($md5 != $new_md5)
-						if ($result == DIV_NODES_FOR_REPLACE_NODE)
-							$this->putNode($file, $node, $schema);
-						else
-							$this->setNode($file, $node, $schema);
+					if($md5 != $new_md5) if($result == DIV_NODES_FOR_REPLACE_NODE) $this->putNode($file, $node, $schema);
+					else
+						$this->setNode($file, $node, $schema);
 
 				}
 			}
