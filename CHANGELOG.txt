@@ -1,4 +1,13 @@
 ----------------------------
+Oct 22, 2017
+----------------------------
+- saving reverse information about indexes from node record
+- new method for replace nodes
+
+    - $db->setNode() - update the node, set only altered properties (in sql UPDATE node SET field = value)
+    - $db->putNode() - replace the node (in sql DELETE node ...; INSERT node ...;)
+- 
+----------------------------
 Sep 20, 2017
 ----------------------------
 - change method for lock node

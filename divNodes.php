@@ -567,52 +567,54 @@ class divNodes
 	/**
 	 * Update data of a node
 	 *
-	 * @param mixed  $id
-	 * @param mixed  $data
-	 * @param string $schema
+	 * @param mixed   $id
+	 * @param mixed   $data
+	 * @param string  $schema
+	 * @param boolean $cop
 	 *
 	 * @return mixed
 	 */
-	public function setNode($id, $data, $schema = null)
+	public function setNode($id, $data, $schema = null, $cop = true)
 	{
-		if(is_null($schema))
-		{
-			$schema = $this->schema;
-		}
+		if(is_null($schema)) $schema = $this->schema;
 
-		if( ! $this->existsSchema($schema))
-		{
-			return false;
-		}
+		if( ! $this->existsSchema($schema)) return false;
 
 		$node = $this->getNode($id, $schema);
 
 		$r = $this->triggerBeforeSet($id, $node, $data);
-		if($r === DIV_NODES_ROLLBACK_TRANSACTION)
-		{
-			return DIV_NODES_ROLLBACK_TRANSACTION;
-		}
+		if($r === DIV_NODES_ROLLBACK_TRANSACTION) return DIV_NODES_ROLLBACK_TRANSACTION;
 
 		$sec = 0;
-		while($this->isLockNode($id, $schema) || $sec > 999999)
-		{
-			$sec ++;
-		}
+		while($this->isLockNode($id, $schema) || $sec > 999999) $sec ++;
+
 		$this->lockNode($id, $schema);
 
-		$old  = $node;
-		$node = self::cop($node, $data);
+		$old = $node;
+		if($cop) $node = self::cop($node, $data); // update the node
+		else $node = $data; // replace node
 
 		file_put_contents(DIV_NODES_ROOT . $schema . "/$id", serialize($node));
 
 		$r = $this->triggerAfterSet($id, $old, $node, $data);
 
-		if($r === DIV_NODES_ROLLBACK_TRANSACTION)
-		{
-			file_put_contents($schema . "/$id", serialize($old));
-		}
+		if($r === DIV_NODES_ROLLBACK_TRANSACTION) file_put_contents($schema . "/$id", serialize($old));
 
 		$this->unlockNode($id, $schema);
+	}
+
+	/**
+	 * Replace node
+	 *
+	 * @param        $id
+	 * @param        $data
+	 * @param string $schema
+	 *
+	 * @return mixed
+	 */
+	public function putNode($id, $data, $schema = null)
+	{
+		return $this->setNode($id, $data, $schema, false);
 	}
 
 	public function triggerBeforeSet($id, &$node, &$data)
@@ -1343,7 +1345,7 @@ class divNodes
 
 				if(pathinfo($full_path, PATHINFO_EXTENSION) == "idx" && file_exists(substr($full_path, 0, strlen($full_path) - 4))) continue;
 
-				if( ! $this->isReservedId($file) && $file != "." && $file != "..")
+				if( ! $this->isReservedId($file) && $file != "." && $file != ".." && ! is_dir($full_path))
 				{
 					$node = $this->getNode($file, $schema);
 					$md5  = md5(serialize($node));
@@ -1356,7 +1358,12 @@ class divNodes
 					// default: DIV_NODES_FOR_CONTINUE_SAVING)
 
 					$new_md5 = md5(serialize($node));
-					if($md5 != $new_md5) $this->setNode($file, $node, $schema);
+					if($md5 != $new_md5)
+						if ($result == DIV_NODES_FOR_REPLACE_NODE)
+							$this->setNode($file, $node, $schema);
+						else
+							$this->putNode($file, $node, $schema);
+
 				}
 			}
 			closedir($dir);
