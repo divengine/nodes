@@ -1,4 +1,4 @@
-# Div PHP Nodes 1.3  
+# Div PHP Nodes 1.4  
 No-SQL Database System for PHP
 
 Library for storage relational and serialized data 
@@ -40,6 +40,7 @@ The class may also:
 - create, rename and delete schema directories.
 - iterate each node with closure function
 - index the node's content for full text search
+- store statistics, and update it dynamically 
 
 ## Basic usage
 
@@ -63,11 +64,5 @@ $contact = $db->getNode($id);
 
 $db->delNode($id);
 ```
-
-# Creating a index of nodes
-```php
-
-```
-# Searching
 
 For more details you can see the examples.

@@ -21,6 +21,7 @@ Oct 22, 2017
     $db->getStats("database/contacts")['count'] - count of contacts
     $db->getStats("database/contacts/.index/n/y")['count'] - count of contacts of NY
 
+- Release 1.4 version
 ----------------------------
 Sep 20, 2017
 ----------------------------
