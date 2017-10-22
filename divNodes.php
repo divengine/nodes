@@ -1361,9 +1361,9 @@ class divNodes
 					$new_md5 = md5(serialize($node));
 					if($md5 != $new_md5)
 						if ($result == DIV_NODES_FOR_REPLACE_NODE)
-							$this->setNode($file, $node, $schema);
-						else
 							$this->putNode($file, $node, $schema);
+						else
+							$this->setNode($file, $node, $schema);
 
 				}
 			}
