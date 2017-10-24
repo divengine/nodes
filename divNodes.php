@@ -550,7 +550,7 @@ class divNodes
 		if(is_null($schema)) $schema = $this->schema;
 
 		// read pure data
-		$data = @file_get_contents(DIV_NODES_ROOT . $schema . "/$id");
+		$data = file_get_contents(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id"));
 		if($data === false) return $default;
 
 		// wait for unlocked
