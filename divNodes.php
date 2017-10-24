@@ -393,7 +393,7 @@ class divNodes
 			}
 
 			// Delete the node
-			unlink($schema . "/$id");
+			unlink(self::clearDoubleSlashes($schema . "/$id"));
 
 			// Delete indexes
 			$idx_path = $schema . "/$id.idx";
@@ -1670,5 +1670,33 @@ class divNodes
 		file_put_contents(DIV_NODES_ROOT . $schema . "/.stats", serialize($stats));
 
 		return $stats;
+	}
+
+	/**
+	 * Clear double slashes in ways
+	 *
+	 * @param $value
+	 *
+	 * @return mixed
+	 */
+	static function clearDoubleSlashes($value)
+	{
+		return self::replaceRecursive('//', '/', $value);
+	}
+
+	/**
+	 * Replace recursively in string
+	 *
+	 * @param string $search
+	 * @param string $replace
+	 * @param string $source
+	 *
+	 * @return mixed
+	 */
+	static function replaceRecursive($search, $replace, $source)
+	{
+		while(strpos($source, $search) !== false) $source = str_replace($search, $replace, $source);
+
+		return $source;
 	}
 }
