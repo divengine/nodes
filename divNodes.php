@@ -217,8 +217,6 @@ class divNodes
 				}
 			}
 
-			if(file_exists(DIV_NODES_ROOT . $schema . "/.locks")) unlink(DIV_NODES_ROOT . $schema . "/.locks");
-
 			// Remove orphan references
 			$references = $this->getReferences($schema);
 
@@ -249,11 +247,11 @@ class divNodes
 						$new_references[] = $re;
 					}
 				}
-				file_put_contents(DIV_NODES_ROOT . $sch . "/.references", serialize($new_references));
+				file_put_contents(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$sch/.references"), serialize($new_references));
 			}
 
-			unlink(DIV_NODES_ROOT . $schema . "/.references");
-			rmdir(DIV_NODES_ROOT . $schema);
+			unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/.references"));
+			rmdir(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema"));
 
 			return true;
 		}
@@ -393,7 +391,7 @@ class divNodes
 			}
 
 			// Delete the node
-			unlink(self::clearDoubleSlashes($schema . "/$id"));
+			unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id"));
 
 			// Delete indexes
 			$idx_path = $schema . "/$id.idx";
@@ -406,7 +404,7 @@ class divNodes
 					$this->delNode($index_id, $word_schema);
 				}
 
-				unlink($schema . "/$id.idx");
+				unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id.idx"));
 			}
 
 			$this->unlockNode($id, $schema);
@@ -471,7 +469,7 @@ class divNodes
 	{
 		if(is_null($schema)) $schema = $this->schema;
 
-		return @unlink(DIV_NODES_ROOT . $schema . '/' . $id . '.lock');
+		return @unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id.lock"));
 	}
 
 	/**
@@ -766,7 +764,7 @@ class divNodes
 
 		if($r === DIV_NODES_ROLLBACK_TRANSACTION)
 		{
-			unlink(DIV_NODES_ROOT . $schema . "/$id");
+			unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id"));
 			$this->unlockNode($id, $schema);
 
 			return DIV_NODES_ROLLBACK_TRANSACTION;
