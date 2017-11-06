@@ -1590,7 +1590,8 @@ class divNodes
 	 */
 	public function getStats($schema = null)
 	{
-		$stats = $this->getNode(".stats", $schema, null);
+		$stats = null;
+		if($this->existsNode(".stats", $schema)) $stats = $this->getNode(".stats", $schema, null);
 
 		if(is_null($stats)) $stats = $this->reStats($schema);
 
