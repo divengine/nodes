@@ -581,7 +581,10 @@ class divNodes
 
 		if( ! $this->existsSchema($schema)) return false;
 
-		$node = $this->getNode($id, $schema);
+		if ($this->existsNode($id, $schema))
+			$node = $this->getNode($id, $schema);
+		else
+			$node = $data;
 
 		$r = $this->triggerBeforeSet($id, $node, $data);
 		if($r === DIV_NODES_ROLLBACK_TRANSACTION) return DIV_NODES_ROLLBACK_TRANSACTION;
