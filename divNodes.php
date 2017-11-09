@@ -581,8 +581,7 @@ class divNodes
 
 		if( ! $this->existsSchema($schema)) return false;
 
-		if ($this->existsNode($id, $schema))
-			$node = $this->getNode($id, $schema);
+		if($this->existsNode($id, $schema)) $node = $this->getNode($id, $schema);
 		else
 			$node = $data;
 
@@ -716,17 +715,11 @@ class divNodes
 	 */
 	public function existsNode($id, $schema = null)
 	{
-		if(is_null($schema))
-		{
-			$schema = $this->schema;
-		}
+		if(is_null($schema)) $schema = $this->schema;
 
 		if(file_exists(DIV_NODES_ROOT . $schema . "/$id"))
 		{
-			if( ! is_dir(DIV_NODES_ROOT . $schema . "/$id"))
-			{
-				return true;
-			}
+			if( ! is_dir(DIV_NODES_ROOT . $schema . "/$id")) return true;
 		}
 
 		return false;
