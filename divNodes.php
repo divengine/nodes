@@ -550,16 +550,36 @@ class divNodes
 		if(is_null($schema)) $schema = $this->schema;
 
 		// read pure data
-		$data = file_get_contents(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id"));
-		if($data === false) return $default;
+		$node_path = self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id");
+
+		// IMPORTANT CHANGE: first check if node is locked, and wait for changes ....
 
 		// wait for unlocked
 		$sec = 0;
 		while($this->isLockNode($id, $schema) || $sec > 999999) $sec ++;
 
-		// lock and load
+		// lock ...
 		$this->lockNode($id, $schema);
+
+		// ... and load
+		if(is_null($default)) $data = file_get_contents($node_path);
+		else
+		{
+			// hide errors if not exists
+			$data = @file_get_contents($node_path);
+		}
+
+		if($data === false) // the node not exists ...
+		{
+			// ... unlock and return default
+			$this->unlockNode($id, $schema);
+
+			return $default;
+		}
+
 		$node = unserialize($data);
+
+		// unlock ...
 		$this->unlockNode($id, $schema);
 
 		return $node;
