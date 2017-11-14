@@ -71,7 +71,7 @@ echo "Creating index for CITY property of CONTACTS ...\n";
 
 $idxCity = 'database/index/contacts/city';
 $db->delSchema($idxCity);
-$db->createIndex(function($node) { return $node['city']; }, null, $idxCity);
+$db->createIndex(function($node) { return $node['city']; }, null, $idxCity, true);
 
 // Search people LIMIT = 10
 echo "Showing first 10 contacts of each city: \n";

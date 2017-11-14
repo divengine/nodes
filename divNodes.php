@@ -250,7 +250,8 @@ class divNodes
 				file_put_contents(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$sch/.references"), serialize($new_references));
 			}
 
-			unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/.references"));
+			@unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/.references"));
+			@unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/.stats"));
 			rmdir(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema"));
 
 			return true;
@@ -1418,12 +1419,13 @@ class divNodes
 	/**
 	 * Add index of node
 	 *
-	 * @param array  $words
-	 * @param scalar $nodeId
-	 * @param string $schema
-	 * @param null   $indexSchema
+	 * @param array   $words
+	 * @param scalar  $nodeId
+	 * @param string  $schema
+	 * @param null    $indexSchema
+	 * @param boolean $wholeWords
 	 */
-	public function addIndex($words, $nodeId, $schema = null, $indexSchema = null)
+	public function addIndex($words, $nodeId, $schema = null, $indexSchema = null, $wholeWords = false)
 	{
 		if(is_null($schema)) $schema = $this->schema;
 		if(is_null($indexSchema)) $indexSchema = $schema . '/.index';
@@ -1435,9 +1437,13 @@ class divNodes
 
 		foreach($words as $word)
 		{
-			$l          = strlen($word);
-			$wordSchema = '';
-			for($i = 0; $i < $l; $i ++) $wordSchema .= $word[ $i ] . '/';
+			$l = strlen($word);
+			if($wholeWords) $wordSchema = $word;
+			else
+			{
+				$wordSchema = '';
+				for($i = 0; $i < $l; $i ++) $wordSchema .= $word[ $i ] . '/';
+			}
 
 			$wordSchema = "$indexSchema/$wordSchema";
 
@@ -1474,8 +1480,9 @@ class divNodes
 	 * @param closure $contentExtractor
 	 * @param string  $schema
 	 * @param string  $indexSchema
+	 * @param boolean $wholeWords
 	 */
-	public function createIndex($contentExtractor = null, $schema = null, $indexSchema = null)
+	public function createIndex($contentExtractor = null, $schema = null, $indexSchema = null, $wholeWords = false)
 	{
 		if(is_null($contentExtractor)) $contentExtractor = function($node, $nodeId)
 		{
@@ -1493,7 +1500,8 @@ class divNodes
 
 		$otherData = [
 			'indexSchema' => $indexSchema,
-			'contentExtractor' => $contentExtractor
+			'contentExtractor' => $contentExtractor,
+			'wholeWords' => $wholeWords
 		];
 
 		// indexing each node
@@ -1521,7 +1529,7 @@ class divNodes
 			// extract words
 			if($extract_words && count($words) == 0) $words = $db->getWords($content);
 
-			$db->addIndex($words, $nodeId, $schema, $indexSchema);
+			$db->addIndex($words, $nodeId, $schema, $indexSchema, $otherData['wholeWords']);
 
 		}, $schema, $otherData);
 	}
@@ -1544,34 +1552,38 @@ class divNodes
 
 		$words = $this->getWords($phrase);
 
-
 		foreach($words as $word)
 		{
 			// build schema from word
-			$l      = strlen($word);
-			$schema = '';
+			$l = strlen($word);
 
-			for($i = 0; $i < $l; $i ++) $schema .= $word[ $i ] . "/";
-
-			$schema = "$indexSchema/$schema";
-
-			if($this->existsSchema($schema))
+			for($wholeWords = 0; $wholeWords < 2; $wholeWords ++)
 			{
-				// get indexes
-				$schemas = $this->getRecursiveNodes($schema, [], [], $offset, $limit);
+				$schema = '';
+				if($wholeWords == 0) for($i = 0; $i < $l; $i ++) $schema .= $word[ $i ] . "/";
+				else
+					$schema = $word; // whole word
 
-				// calculate score
-				foreach($schemas as $sch => $nodes) foreach($nodes as $node)
+				$schema = "$indexSchema/$schema";
+
+				if($this->existsSchema($schema))
 				{
-					$id = md5($node['path']);
+					// get indexes
+					$schemas = $this->getRecursiveNodes($schema, [], [], $offset, $limit);
 
-					if( ! isset($results[ $id ]))
+					// calculate score
+					foreach($schemas as $sch => $nodes) foreach($nodes as $node)
 					{
-						$node['score']  = 0;
-						$results[ $id ] = $node;
-					}
+						$id = md5($node['path']);
 
-					$results[ $id ]['score'] ++;
+						if( ! isset($results[ $id ]))
+						{
+							$node['score']  = 0;
+							$results[ $id ] = $node;
+						}
+
+						$results[ $id ]['score'] ++;
+					}
 				}
 			}
 		}
