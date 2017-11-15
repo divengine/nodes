@@ -1,7 +1,7 @@
 <?php
 
 /**
- * divNodes
+ * [[]] Div PHP Nodes
  *
  * NoSQL Database System for PHP
  *
@@ -19,11 +19,14 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program as the file LICENSE.txt; if not, please see
- * http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
+ * https://www.gnu.org/licenses/gpl-3.0.txt
  *
+ * @package com.divengine.nodes
  * @author  Rafa Rodriguez [@rafageist] <rafageist@hotmail.com>
  * @version 1.3
- * @link    http://github.com/divengine/divNodes
+ *
+ * @link    http://divengine.com
+ * @link    http://github.com/divengine/div-nodes
  */
 
 /* CONSTANTS */
@@ -37,11 +40,10 @@ define("DIV_NODES_ROLLBACK_TRANSACTION", "DIV_NODES_ROLLBACK_TRANSACTION");
 define("DIV_NODES_FOR_REPLACE_NODE", "DIV_NODES_FOR_REPLACE_NODE");
 
 /**
- * The class
+ * Class divNodes
  */
 class divNodes
 {
-
 	static $__log_mode = false;
 	static $__log_file = DIV_NODES_LOG_FILE;
 	static $__log_messages = [];
@@ -53,8 +55,6 @@ class divNodes
 	 * Constructor
 	 *
 	 * @param string $schema
-	 *
-	 * @return divNodes
 	 */
 	public function __construct($schema)
 	{
@@ -167,9 +167,8 @@ class divNodes
 	 *
 	 * @param string $message
 	 * @param string $level
-	 * @param string $file
 	 */
-	static function log($message, $level = "INFO", $file = DIV_NODES_LOG_FILE)
+	static function log($message, $level = "INFO")
 	{
 		if(self::$__log_mode)
 		{
@@ -395,7 +394,7 @@ class divNodes
 			unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id"));
 
 			// Delete indexes
-			$idx_path = $schema . "/$id.idx";
+			$idx_path = DIV_NODES_ROOT . "/$schema/$id.idx";
 			if(file_exists($idx_path))
 			{
 				$idx = unserialize(file_get_contents($idx_path));
@@ -405,7 +404,7 @@ class divNodes
 					$this->delNode($index_id, $word_schema);
 				}
 
-				unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id.idx"));
+				unlink(self::clearDoubleSlashes($idx_path));
 			}
 
 			$this->unlockNode($id, $schema);
@@ -750,7 +749,7 @@ class divNodes
 	 * Insert a node in schema
 	 *
 	 * @param mixed  $node
-	 * @param scalar $id
+	 * @param string $id
 	 * @param string $schema
 	 *
 	 * @return mixed
@@ -1159,9 +1158,11 @@ class divNodes
 	/**
 	 * Set id of Node
 	 *
-	 * @param scalar $id_old
-	 * @param scalar $id_new
+	 * @param string $id_old
+	 * @param string $id_new
 	 * @param string $schema
+	 *
+	 * @return boolean
 	 */
 	public function setNodeID($id_old, $id_new, $schema = null)
 	{
@@ -1195,7 +1196,7 @@ class divNodes
 				{
 					$node = $this->getNode($fid, $rel['schema']);
 
-					$procede = false;
+					$proceed = false;
 
 					if(is_array($node))
 					{
@@ -1203,7 +1204,7 @@ class divNodes
 						{
 							if($node[ $rel['property'] ] == $id_old)
 							{
-								$procede = true;
+								$proceed = true;
 							}
 						}
 					}
@@ -1213,12 +1214,12 @@ class divNodes
 						{
 							if($node->$rel['property'] == $id_old)
 							{
-								$procede = true;
+								$proceed = true;
 							}
 						}
 					}
 
-					if($procede)
+					if($proceed)
 					{
 						$this->setNode($fid, [
 							$rel['property'] => $id_new
@@ -1232,6 +1233,8 @@ class divNodes
 
 		$this->unlockNode($id_old, $schema);
 		$this->unlockNode($id_new, $schema);
+
+		return true;
 	}
 
 	/**
@@ -1420,7 +1423,7 @@ class divNodes
 	 * Add index of node
 	 *
 	 * @param array   $words
-	 * @param scalar  $nodeId
+	 * @param string  $nodeId
 	 * @param string  $schema
 	 * @param null    $indexSchema
 	 * @param boolean $wholeWords
