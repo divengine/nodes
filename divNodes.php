@@ -282,10 +282,8 @@ class divNodes
 		if(file_exists(DIV_NODES_ROOT . $schema . "/$id"))
 		{
 			$sec = 0;
-			while($this->isLockNode($id, $schema) || $sec > 999999)
-			{
-				$sec ++;
-			}
+			while($this->isLockNode($id, $schema) || $sec > 999999) $sec ++;
+
 			$this->lockNode($id, $schema);
 
 			$r = $this->triggerBeforeDel($id, $schema);
@@ -483,16 +481,11 @@ class divNodes
 	{
 		if(is_null($schema)) $schema = $this->schema;
 
-		if( ! $this->existsSchema($schema))
-		{
-			return false;
-		}
+		if( ! $this->existsSchema($schema)) return [];
 
 		$path = DIV_NODES_ROOT . $schema . "/.references";
-		if( ! file_exists($path))
-		{
-			file_put_contents($path, serialize([]));
-		}
+		if( ! file_exists($path)) file_put_contents($path, serialize([]));
+
 		$data = file_get_contents($path);
 
 		return unserialize($data);
@@ -1246,12 +1239,13 @@ class divNodes
 	 */
 	public function addReference($params = [])
 	{
-		$dp     = [
+		$dp = [
 			"schema" => $this->schema,
 			"foreign_schema" => $this->schema,
 			"update_cascade" => true,
 			"delete_cascade" => true
 		];
+
 		$params = self::cop($dp, $params);
 
 		if( ! isset($params['property']))
@@ -1700,6 +1694,150 @@ class divNodes
 		file_put_contents(DIV_NODES_ROOT . $schema . "/.stats", serialize($stats));
 
 		return $stats;
+	}
+
+	/**
+	 * Rename node
+	 *
+	 * @param string $oldId
+	 * @param string $newId
+	 * @param string $schema
+	 *
+	 * @return boolean
+	 */
+	public function renameNode($oldId, $newId, $schema = null)
+	{
+		if(is_null($schema)) $schema = $this->schema;
+
+		if($this->existsNode($newId, $schema)) return false;
+
+		if( ! $this->existsNode($oldId, $schema)) return false;
+
+		$sec = 0;
+		while($this->isLockNode($oldId, $schema) || $sec > 999999) $sec ++;
+
+		$this->lockNode($oldId, $schema);
+
+		// update references
+		$restore    = [];
+		$references = $this->getReferences($schema);
+		foreach($references as $rel)
+		{
+			if($rel['foreign_schema'] == $schema)
+			{
+				if( ! $this->existsSchema($rel['schema'])) continue;
+
+				$ids = $this->getNodesID($rel['schema']);
+
+				foreach($ids as $fid)
+				{
+					$node = $this->getNode($fid, $rel['schema']);
+
+					$restore[] = [
+						"node" => $node,
+						"id" => $fid,
+						"schema" => $rel['schema']
+					];
+
+					if(is_array($node))
+					{
+						if(isset($node[ $rel['property'] ]))
+						{
+							if($node[ $rel['property'] ] == $oldId)
+							{
+								$this->setNode($fid, [
+									$rel['property'] => $newId
+								], $rel['schema']);
+
+							}
+						}
+					}
+					elseif(is_object($node))
+					{
+						if(isset($node->$rel['property']))
+						{
+							if($node->$rel['property'] == $oldId)
+							{
+								$this->setNode($fid, [
+									$rel['property'] => $newId
+								], $rel['schema']);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// update indexes
+		if(file_exists(DIV_NODES_ROOT . $schema . "/$oldId.idx"))
+		{
+			$idx = $this->getNode("$oldId.idx", $schema);
+
+			foreach($idx['indexes'] as $wordSchema => $index)
+			{
+				// update index
+				$pathToNode               = "$schema/$newId";
+				$nodeIndex                = $this->getNode($index, $wordSchema);
+				$nodeIndex['id']          = $newId;
+				$nodeIndex['last_update'] = date("Y-m-d h:i:s");
+				$nodeIndex['path']        = $pathToNode;
+
+				$this->setNode($index, $nodeIndex, $wordSchema);
+
+				// rename index (recursive call)
+
+				$newIndex = md5($pathToNode);
+				$this->renameNode($index, $newIndex, $wordSchema);
+
+				// update reverse indexes
+				$idx['indexes'][ $wordSchema ] = $newIndex;
+			}
+
+			// update reverse indexes
+			$idx["last_update"] = date("Y-m-d h:i:s");
+			$this->putNode("$oldId.idx", $idx, $schema);
+
+			// real rename of idx file
+			rename(DIV_NODES_ROOT . $schema . "/$oldId.idx", DIV_NODES_ROOT . $schema . "/$newId.idx");
+		}
+
+		// real rename of node file
+		rename(DIV_NODES_ROOT . $schema . "/$oldId", DIV_NODES_ROOT . $schema . "/$newId");
+
+		$this->unlockNode($oldId, $schema);
+
+		return true;
+
+	}
+
+	public function addOrder($value, $nodeId, $tag = 'default', $schema = null, $schemaOrder = null)
+	{
+		if(is_null($schema)) $schema = $this->schema;
+		if(is_null($schemaOrder)) $schemaOrder = $schema . "/.order";
+
+		$stats = $this->getStats($schemaOrder . "/$tag");
+
+		$total = 0;
+		if(isset($stats['count'])) $total = $stats['count'];
+
+		for($i = 1; $i <= $total; $i ++)
+		{
+			$nodeOrder = $this->getNode("$i", $schemaOrder . "/$tag");
+
+			if($nodeOrder['value'] > $value)
+			{
+				for($j = $total; $j >= $i; $j --)
+				{
+					$k = $j + 1;
+
+
+					rename(DIV_NODES_ROOT . $schemaOrder . "/$tag/$j", DIV_NODES_ROOT . $schemaOrder . "/$tag/$k");
+					if(file_exists(DIV_NODES_ROOT . $schemaOrder . "/$tag/$j.idx")) rename(DIV_NODES_ROOT . $schemaOrder . "/$tag/$j.idx", DIV_NODES_ROOT . $schemaOrder . "/$tag/$k.idx");
+				}
+				break;
+			}
+
+		}
 	}
 
 	/**

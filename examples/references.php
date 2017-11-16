@@ -6,7 +6,7 @@
  * References example
  *
  * @author Rafa Rodriguez [@rafageist] <rafageis@hotmail.com>
- *        
+ *
  */
 include "../divNodes.php";
 
@@ -17,16 +17,16 @@ $db = new divNodes("database/companies");
 $db->delNodes();
 
 // Add node into schema database/companies
-$id = $db->addNode(array(
-		"name" => "Company A",
-		"phone" => "1-(111) 223-333"
-));
+$id = $db->addNode([
+	"name" => "Company A",
+	"phone" => "1-(111) 223-333"
+]);
 
 // Change data of node
-$db->setNode($id, array(
-		"email" => "questions@example.com",
-		"phone" => "+1233455566"
-));
+$db->setNode($id, [
+	"email" => "questions@example.com",
+	"phone" => "+1233455566"
+]);
 
 // Retrieve a node from schema database/companies
 $company = $db->getNode($id);
@@ -37,38 +37,39 @@ echo $company['name'] . " - ";
 $db->addSchema("database/employees");
 
 // Clear the new schema
-$db->delNodes(array(), "database/employees");
+$db->delNodes([], "database/employees");
 
 // Add reference on the fly
-$db->addReference(array(
-		"schema" => "database/employees",
-		"foreign_schema" => "database/companies",
-		"property" => "company"
-));
+$db->addReference([
+	"schema" => "database/employees",
+	"foreign_schema" => "database/companies",
+	"property" => "company"
+]);
 
 // Add node related
-$ide = $db->addNode(array(
-		"name" => "Rafa Rodriguez",
-		"company" => $id
-), null, "database/employees");
+$ide = $db->addNode([
+	"name" => "Rafa Rodriguez",
+	"company" => $id
+], null, "database/employees");
 
 // Add another node related
-$ide = $db->addNode(array(
-		"name" => "Peter Joseph",
-		"company" => $id
-), null, "database/employees");
+$ide = $db->addNode([
+	"name" => "Peter Joseph",
+	"company" => $id
+], null, "database/employees");
 
 // Retrieve employees
-$employees = $db->getNodes(array(
-		"where" => "{company} == '$id'",
-		"offset" => 0,
-		"limit" => 20,
-		"fields" => "name",
-		"order" => "name",
-		"order_asc" => true
-), "database/employees");
+$employees = $db->getNodes([
+	"where" => "{company} == '$id'",
+	"offset" => 0,
+	"limit" => 20,
+	"fields" => "name",
+	"order" => "name",
+	"order_asc" => true
+], "database/employees");
 
-foreach ( $employees as $ide => $employee ) {
+foreach($employees as $ide => $employee)
+{
 	echo $employee['name'] . ", ";
 }
 
