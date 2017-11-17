@@ -1971,7 +1971,6 @@ class divNodes
 
 		if(is_array($closure))
 		{
-			$closure     = isset($closure['closure']) ? $closure['closure'] : function() { };
 			$tag         = isset($closure['tag']) ? $closure['tag'] : $tag;
 			$offset      = isset($closure['offset']) ? $closure['offset'] : $offset;
 			$limit       = isset($closure['limit']) ? $closure['limit'] : $limit;
@@ -1979,6 +1978,7 @@ class divNodes
 			$otherData   = isset($closure['otherData']) ? $closure['otherData'] : $otherData;
 			$schema      = isset($closure['schema']) ? $closure['schema'] : $schema;
 			$schemaOrder = isset($closure['schemaOrder']) ? $closure['schemaOrder'] : $schemaOrder;
+			$closure     = isset($closure['closure']) ? $closure['closure'] : function() { };
 		}
 
 		if(is_null($schema)) $schema = $this->schema;
