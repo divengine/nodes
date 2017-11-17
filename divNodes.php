@@ -70,7 +70,7 @@ class divNodes
 	 */
 	protected final function isReservedId($id)
 	{
-		return $id == '.references' || $id == '.index' || $id == '.stats';
+		return $id == '.references' || $id == '.index' || $id == '.stats' || $id == '.first' || $id == '.last';
 	}
 
 	/**
@@ -1457,17 +1457,7 @@ class divNodes
 			else
 				$this->addNode($node, $id, $wordSchema);
 
-			// save reverse index
-			$node = $this->getNode("$nodeId.idx", $schema, [
-				"indexes" => [],
-				"last_update" => date("Y-m-d h:i:s")
-			]);
-
-			$node['indexes'][ $wordSchema ] = $id;
-
-			if($this->existsNode("$nodeId.idx", $schema)) $this->setNode("$nodeId.idx", $node, $schema);
-			else
-				$this->addNode($node, "$nodeId.idx", $schema);
+			$this->addInverseIndex($nodeId, $schema, $id, $wordSchema);
 		}
 	}
 
@@ -1789,11 +1779,11 @@ class divNodes
 				$newIndex = md5($pathToNode);
 				$this->renameNode($index, $newIndex, $wordSchema);
 
-				// update reverse indexes
+				// update inverse indexes
 				$idx['indexes'][ $wordSchema ] = $newIndex;
 			}
 
-			// update reverse indexes
+			// update inverse indexes
 			$idx["last_update"] = date("Y-m-d h:i:s");
 			$this->putNode("$oldId.idx", $idx, $schema);
 
@@ -1810,34 +1800,185 @@ class divNodes
 
 	}
 
+	public function getOrderFirst($schemaTag)
+	{
+		return $this->getNode('.first', $schemaTag, false);
+	}
+
+	public function setOrderFirst($schemaTag, $orderId)
+	{
+		$this->putNode('.first', [
+			'id' => $orderId,
+			'last_update' => date("Y-m-d h:i:s")
+		], $schemaTag);
+	}
+
+	public function setOrderLast($schemaTag, $orderId)
+	{
+		$this->putNode('.last', [
+			'id' => $orderId,
+			'last_update' => date("Y-m-d h:i:s")
+		], $schemaTag);
+	}
+
+	public function getOrderLast($schemaTag)
+	{
+		return $this->getNode('.last', $schemaTag, false);
+	}
+
+	/**
+	 * Add order
+	 *
+	 * @param        $value
+	 * @param        $nodeId
+	 * @param string $tag
+	 * @param string $schema
+	 * @param string $schemaOrder
+	 *
+	 * @return boolean
+	 */
 	public function addOrder($value, $nodeId, $tag = 'default', $schema = null, $schemaOrder = null)
 	{
 		if(is_null($schema)) $schema = $this->schema;
 		if(is_null($schemaOrder)) $schemaOrder = $schema . "/.order";
 
-		$stats = $this->getStats($schemaOrder . "/$tag");
+		$schemaTag = "$schemaOrder/$tag";
 
-		$total = 0;
-		if(isset($stats['count'])) $total = $stats['count'];
+		$this->addSchema($schemaTag);
 
-		for($i = 1; $i <= $total; $i ++)
+		$stats   = $this->getStats($schemaTag);
+		$total   = isset($stats['count']) ? $stats['count'] : 0;
+		$newNode = false;
+		$orderId = md5("$schema/$nodeId");
+
+		// check if no nodes
+		if($total == 0)
 		{
-			$nodeOrder = $this->getNode("$i", $schemaOrder . "/$tag");
+			$this->setOrderFirst($schemaTag, $orderId);
+			$this->setOrderLast($schemaTag, $orderId);
 
-			if($nodeOrder['value'] > $value)
-			{
-				for($j = $total; $j >= $i; $j --)
-				{
-					$k = $j + 1;
-
-
-					rename(DIV_NODES_ROOT . $schemaOrder . "/$tag/$j", DIV_NODES_ROOT . $schemaOrder . "/$tag/$k");
-					if(file_exists(DIV_NODES_ROOT . $schemaOrder . "/$tag/$j.idx")) rename(DIV_NODES_ROOT . $schemaOrder . "/$tag/$j.idx", DIV_NODES_ROOT . $schemaOrder . "/$tag/$k.idx");
-				}
-				break;
-			}
-
+			$newNode = [
+				"schema" => $schema,
+				"id" => $nodeId,
+				"next" => false,
+				"previous" => false,
+				"value" => $value,
+				'last_update' => date("Y-m-d h:i:s")
+			];
 		}
+		else
+		{
+			$first        = $this->getOrderFirst($schemaTag);
+			$last         = $this->getOrderLast($schemaTag);
+			$firstOrder   = $this->getNode($first['id'], $schemaTag);
+			$lastOrder    = $this->getNode($last['id'], $schemaTag);
+			$current      = $first['id'];
+			$currentOrder = $firstOrder;
+
+			do
+			{
+				if($currentOrder['value'] > $value)
+				{
+					if($currentOrder['previous'] === false) // insert on top
+					{
+						$newNode = [
+							"schema" => $schema,
+							"id" => $nodeId,
+							"next" => $current,
+							"previous" => false,
+							"value" => $value,
+							'last_update' => date("Y-m-d h:i:s")
+						];
+
+						$currentOrder['previous'] = $orderId;
+						$this->putNode($current, $currentOrder, $schemaTag);
+						$this->setOrderFirst($schemaTag, $orderId);
+						break;
+					}
+
+					// insert before
+					$newNode = [
+						"schema" => $schema,
+						"id" => $nodeId,
+						"next" => $current,
+						"previous" => $currentOrder['previous'],
+						"value" => $value,
+						'last_update' => date("Y-m-d h:i:s")
+					];
+
+					$previous                 = $currentOrder['previous'];
+					$currentOrder['previous'] = $orderId;
+					$previousNode             = $this->getNode($previous, $schemaTag);
+					$previousNode['next']     = $orderId;
+
+					$this->putNode($current, $currentOrder, $schemaTag);
+					$this->putNode($previous, $previousNode, $schemaTag);
+					break;
+				}
+
+				if($currentOrder['next'] === false) break;
+
+				$current      = $currentOrder['next'];
+				$currentOrder = $this->getNode($current, $schemaTag);
+
+			} while($currentOrder['next'] !== false);
+
+			// insert on bottom
+			if($newNode === false)
+			{
+				$lastOrder['next'] = $orderId;
+				$this->putNode($last['id'], $lastOrder, $schemaTag);
+
+				$newNode = [
+					"schema" => $schema,
+					"id" => $nodeId,
+					"next" => false,
+					"previous" => $last['id'],
+					"value" => $value,
+					'last_update' => date("Y-m-d h:i:s")
+				];
+
+				$this->setOrderLast($schemaTag, $orderId);
+			}
+		}
+
+		if($newNode !== false)
+		{
+			$this->addNode($newNode, $orderId, $schemaTag);
+			$this->addInverseIndex($nodeId, $schema, $orderId, $schemaTag);
+
+			return true;
+		}
+
+		return false;
+	}
+
+	public function foreachOrder($tag, $closure, $schema = null, $schemaOrder = null)
+	{
+		if(is_null($schema)) $schema = $this->schema;
+		if(is_null($schemaOrder)) $schemaOrder = $schema . "/.order";
+
+		$schemaTag = "$schemaOrder/$tag";
+		$this->addSchema($schemaTag);
+
+		$first       = $this->getOrderFirst($schemaTag);
+		$last        = $this->getOrderLast($schemaTag);
+		$firstNode   = $this->getNode($first['id'], $schemaTag);
+		$lastNode    = $this->getNode($last['id'], $schemaTag);
+		$current     = $first['id'];
+		$currentNode = $firstNode;
+
+		do
+		{
+
+			$closure($currentNode, $current);
+
+			if($currentNode['next'] === false) break;
+
+			$current     = $currentNode['next'];
+			$currentNode = $this->getNode($current, $schemaTag);
+
+		} while($currentNode['next'] !== false);
 	}
 
 	/**
@@ -1866,5 +2007,29 @@ class divNodes
 		while(strpos($source, $search) !== false) $source = str_replace($search, $replace, $source);
 
 		return $source;
+	}
+
+	/**
+	 * Add a inverse index of node
+	 *
+	 * @param string $nodeId
+	 * @param string $schema
+	 * @param string $index
+	 * @param string $wordSchema
+	 *
+	 * @return mixed
+	 */
+	public function addInverseIndex($nodeId, $schema, $index, $wordSchema)
+	{
+		$node = $this->getNode("$nodeId.idx", $schema, [
+			"indexes" => [],
+			"last_update" => date("Y-m-d h:i:s")
+		]);
+
+		$node['indexes'][ $wordSchema ] = $index;
+		$node['last_update']            = date("Y-m-d h:i:s");
+		$this->putNode("$nodeId.idx", $node, $schema);
+
+		return $node;
 	}
 }
