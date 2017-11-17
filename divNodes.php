@@ -1845,15 +1845,15 @@ class divNodes
 		$schemaTag = "$schemaOrder/$tag";
 
 		$this->addSchema($schemaTag);
-
-		$stats   = $this->getStats($schemaTag);
-		$total   = isset($stats['count']) ? $stats['count'] : 0;
 		$newNode = false;
 		$orderId = md5("$schema/$nodeId");
+		$first   = $this->getOrderFirst($schemaTag);
+		$last    = $this->getOrderLast($schemaTag);
 
 		// check if no nodes
-		if($total == 0)
+		if($first === false)
 		{
+			// insert the first
 			$this->setOrderFirst($schemaTag, $orderId);
 			$this->setOrderLast($schemaTag, $orderId);
 
@@ -1868,8 +1868,7 @@ class divNodes
 		}
 		else
 		{
-			$first        = $this->getOrderFirst($schemaTag);
-			$last         = $this->getOrderLast($schemaTag);
+
 			$firstOrder   = $this->getNode($first['id'], $schemaTag);
 			$lastOrder    = $this->getNode($last['id'], $schemaTag);
 			$current      = $first['id'];
@@ -1956,32 +1955,65 @@ class divNodes
 	/**
 	 * For each order
 	 *
+	 * @param mixed   $closure
 	 * @param string  $tag
-	 * @param closure $closure
+	 * @param integer $offset
+	 * @param integer $limit
+	 * @param bool    $fromFirst
+	 * @param array   $otherData
 	 * @param string  $schema
 	 * @param string  $schemaOrder
-	 * @param bool    $fromFirst
+	 *
+	 * @return mixed
 	 */
-	public function foreachOrder($tag, $closure, $schema = null, $schemaOrder = null, $fromFirst = true, &$otherData = [])
+	public function foreachOrder($closure, $tag = 'default', $offset = 0, $limit = - 1, $fromFirst = true, &$otherData = [], $schema = null, $schemaOrder = null)
 	{
+
+		if(is_array($closure))
+		{
+			$closure     = isset($closure['closure']) ? $closure['closure'] : function() { };
+			$tag         = isset($closure['tag']) ? $closure['tag'] : $tag;
+			$offset      = isset($closure['offset']) ? $closure['offset'] : $offset;
+			$limit       = isset($closure['limit']) ? $closure['limit'] : $limit;
+			$fromFirst   = isset($closure['fromFirst']) ? $closure['fromFirst'] : $fromFirst;
+			$otherData   = isset($closure['otherData']) ? $closure['otherData'] : $otherData;
+			$schema      = isset($closure['schema']) ? $closure['schema'] : $schema;
+			$schemaOrder = isset($closure['schemaOrder']) ? $closure['schemaOrder'] : $schemaOrder;
+		}
+
 		if(is_null($schema)) $schema = $this->schema;
 		if(is_null($schemaOrder)) $schemaOrder = $schema . "/.order";
 
 		$schemaTag = "$schemaOrder/$tag";
 		$this->addSchema($schemaTag);
 
-		$first       = $this->getOrderFirst($schemaTag);
-		$last        = $this->getOrderLast($schemaTag);
-		$firstOrder  = $this->getNode($first['id'], $schemaTag);
-		$lastOrder   = $this->getNode($last['id'], $schemaTag);
-		$currentNode = $fromFirst ? $firstOrder : $lastOrder;
+		$first = $this->getOrderFirst($schemaTag);
+		$last  = $this->getOrderLast($schemaTag);
 
-		do
+		if($first !== false)
 		{
-			$closure($currentNode, $otherData);
-			$current     = $fromFirst ? $currentNode['next'] : $currentNode['previous'];
-			$currentNode = $current !== false ? $this->getNode($current, $schemaTag) : null;
-		} while($current !== false);
+			$firstOrder  = $this->getNode($first['id'], $schemaTag);
+			$lastOrder   = $this->getNode($last['id'], $schemaTag);
+			$currentNode = $fromFirst ? $firstOrder : $lastOrder;
+			$iterator    = - 1;
+
+			do
+			{
+				$iterator ++;
+				if($iterator < $offset) continue;
+
+				$result = $closure($currentNode, $iterator, $otherData);
+
+				if($result == DIV_NODES_FOR_BREAK) break;
+
+				$current     = $fromFirst ? $currentNode['next'] : $currentNode['previous'];
+				$currentNode = $current !== false ? $this->getNode($current, $schemaTag) : null;
+
+				$iterator ++;
+			} while($current !== false && ($iterator < $limit || $limit == - 1));
+		}
+
+		return $otherData;
 	}
 
 	/**
