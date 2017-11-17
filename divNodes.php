@@ -1962,7 +1962,7 @@ class divNodes
 	 * @param string  $schemaOrder
 	 * @param bool    $fromFirst
 	 */
-	public function foreachOrder($tag, $closure, $schema = null, $schemaOrder = null, $fromFirst = true)
+	public function foreachOrder($tag, $closure, $schema = null, $schemaOrder = null, $fromFirst = true, &$otherData = [])
 	{
 		if(is_null($schema)) $schema = $this->schema;
 		if(is_null($schemaOrder)) $schemaOrder = $schema . "/.order";
@@ -1979,7 +1979,7 @@ class divNodes
 
 		do
 		{
-			$closure($currentNode, $current);
+			$closure($currentNode, $current, $otherData);
 
 			if($fromFirst)
 			{
