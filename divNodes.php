@@ -1972,28 +1972,15 @@ class divNodes
 
 		$first       = $this->getOrderFirst($schemaTag);
 		$last        = $this->getOrderLast($schemaTag);
-		$firstNode   = $this->getNode($first['id'], $schemaTag);
-		$lastNode    = $this->getNode($last['id'], $schemaTag);
-		$current     = $fromFirst ? $first['id'] : $last['id'];
-		$currentNode = $fromFirst ? $firstNode : $lastNode;
+		$firstOrder  = $this->getNode($first['id'], $schemaTag);
+		$lastOrder   = $this->getNode($last['id'], $schemaTag);
+		$currentNode = $fromFirst ? $firstOrder : $lastOrder;
 
 		do
 		{
-			$closure($currentNode, $current, $otherData);
-
-			if($fromFirst)
-			{
-				if($currentNode['next'] === false) break;
-				$current     = $currentNode['next'];
-				$currentNode = $this->getNode($current, $schemaTag);
-			}
-			else
-			{
-				if($currentNode['previous'] === false) break;
-				$current     = $currentNode['previous'];
-				$currentNode = $this->getNode($current, $schemaTag);
-			}
-
+			$closure($currentNode, $otherData);
+			$current     = $fromFirst ? $currentNode['next'] : $currentNode['previous'];
+			$currentNode = $current !== false ? $this->getNode($current, $schemaTag) : null;
 		} while($current !== false);
 	}
 
