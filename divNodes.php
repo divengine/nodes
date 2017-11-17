@@ -1953,7 +1953,16 @@ class divNodes
 		return false;
 	}
 
-	public function foreachOrder($tag, $closure, $schema = null, $schemaOrder = null)
+	/**
+	 * For each order
+	 *
+	 * @param string  $tag
+	 * @param closure $closure
+	 * @param string  $schema
+	 * @param string  $schemaOrder
+	 * @param bool    $fromFirst
+	 */
+	public function foreachOrder($tag, $closure, $schema = null, $schemaOrder = null, $fromFirst = true)
 	{
 		if(is_null($schema)) $schema = $this->schema;
 		if(is_null($schemaOrder)) $schemaOrder = $schema . "/.order";
@@ -1965,20 +1974,27 @@ class divNodes
 		$last        = $this->getOrderLast($schemaTag);
 		$firstNode   = $this->getNode($first['id'], $schemaTag);
 		$lastNode    = $this->getNode($last['id'], $schemaTag);
-		$current     = $first['id'];
-		$currentNode = $firstNode;
+		$current     = $fromFirst ? $first['id'] : $last['id'];
+		$currentNode = $fromFirst ? $firstNode : $lastNode;
 
 		do
 		{
-
 			$closure($currentNode, $current);
 
-			if($currentNode['next'] === false) break;
+			if($fromFirst)
+			{
+				if($currentNode['next'] === false) break;
+				$current     = $currentNode['next'];
+				$currentNode = $this->getNode($current, $schemaTag);
+			}
+			else
+			{
+				if($currentNode['previous'] === false) break;
+				$current     = $currentNode['previous'];
+				$currentNode = $this->getNode($current, $schemaTag);
+			}
 
-			$current     = $currentNode['next'];
-			$currentNode = $this->getNode($current, $schemaTag);
-
-		} while($currentNode['next'] !== false);
+		} while($current !== false);
 	}
 
 	/**
