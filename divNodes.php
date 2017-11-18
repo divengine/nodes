@@ -269,159 +269,205 @@ class divNodes
 	 */
 	public function delNode($id, $schema = null)
 	{
-		if(is_null($schema))
+		if(is_null($schema)) $schema = $this->schema;
+		if( ! $this->existsSchema($schema)) return false;
+		if( ! file_exists(DIV_NODES_ROOT . $schema . "/$id")) return false;
+
+		$is_order = false;
+
+		// get node and keep locked
+		$node = $this->getNode($id, $schema, null, true);
+
+		if(file_exists(DIV_NODES_ROOT . $schema . "/.first") && file_exists(DIV_NODES_ROOT . $schema . "/.last") && ! $this->isReservedId($id))
 		{
-			$schema = $this->schema;
+			// lock the list
+			$this->lockSchema($schema);
+			$is_order = true;
 		}
 
-		if( ! $this->existsSchema($schema))
+		$r = $this->triggerBeforeDel($id, $schema);
+		if($r === DIV_NODES_ROLLBACK_TRANSACTION)
 		{
-			return false;
+			$this->unlockNode($id, $schema);
+			if($is_order) $this->unlockSchema($schema);
+
+			return DIV_NODES_ROLLBACK_TRANSACTION;
 		}
 
-		if(file_exists(DIV_NODES_ROOT . $schema . "/$id"))
+		$restore = [];
+
+		// Delete cascade
+		$references = $this->getReferences($schema);
+		foreach($references as $rel)
 		{
-			$sec = 0;
-			while($this->isLockNode($id, $schema) || $sec > 999999) $sec ++;
-
-			$this->lockNode($id, $schema);
-
-			$r = $this->triggerBeforeDel($id, $schema);
-			if($r === DIV_NODES_ROLLBACK_TRANSACTION)
+			if($rel['foreign_schema'] == $schema)
 			{
-				$this->unlockNode($id, $schema);
+				if( ! $this->existsSchema($rel['schema'])) continue;
 
-				return DIV_NODES_ROLLBACK_TRANSACTION;
-			}
-
-			$restore = [];
-			// Delete cascade
-			$references = $this->getReferences($schema);
-			foreach($references as $rel)
-			{
-				if($rel['foreign_schema'] == $schema)
+				$ids = $this->getNodesID($rel['schema']);
+				foreach($ids as $fid)
 				{
-					if( ! $this->existsSchema($rel['schema']))
+					$referencedNode = $this->getNode($fid, $rel['schema']);
+
+					$restore[] = [
+						"node" => $referencedNode,
+						"id" => $fid,
+						"schema" => $rel['schema']
+					];
+
+					$delete_node = false;
+
+					if(is_array($referencedNode))
 					{
-						continue;
-					}
-					$ids = $this->getNodesID($rel['schema']);
-					foreach($ids as $fid)
-					{
-						$node = $this->getNode($fid, $rel['schema']);
-
-						$restore[] = [
-							"node" => $node,
-							"id" => $fid,
-							"schema" => $rel['schema']
-						];
-
-						$delete_node = false;
-
-						if(is_array($node))
+						if(isset($referencedNode[ $rel['property'] ]))
 						{
-							if(isset($node[ $rel['property'] ]))
+							if($referencedNode[ $rel['property'] ] == $id)
 							{
-								if($node[ $rel['property'] ] == $id)
+								if($rel['delete_cascade'] == true)
 								{
-									if($rel['delete_cascade'] == true)
-									{
-										$delete_node = true;
-									}
-									else
-									{
-										$this->setNode($fid, [
-											$rel['property'] => null
-										], $rel['schema']);
-									}
+									$delete_node = true;
+								}
+								else
+								{
+									$this->setNode($fid, [
+										$rel['property'] => null
+									], $rel['schema']);
 								}
 							}
 						}
-						elseif(is_object($node))
+					}
+					elseif(is_object($referencedNode))
+					{
+						if(isset($referencedNode->$rel['property']))
 						{
-							if(isset($node->$rel['property']))
+							if($referencedNode->$rel['property'] == $id)
 							{
-								if($node->$rel['property'] == $id)
+								if($rel['delete_cascade'] == true)
 								{
-									if($rel['delete_cascade'] == true)
-									{
-										$delete_node = true;
-									}
-									else
-									{
-										$this->setNode($fid, [
-											$rel['property'] => null
-										], $rel['schema']);
-									}
+									$delete_node = true;
+								}
+								else
+								{
+									$this->setNode($fid, [
+										$rel['property'] => null
+									], $rel['schema']);
 								}
 							}
 						}
+					}
 
-						if($delete_node)
+					if($delete_node)
+					{
+						$r = $this->delNode($fid, $rel['schema']);
+						if($r === DIV_NODES_ROLLBACK_TRANSACTION)
 						{
-							$r = $this->delNode($fid, $rel['schema']);
-							if($r === DIV_NODES_ROLLBACK_TRANSACTION)
-							{
-								return DIV_NODES_ROLLBACK_TRANSACTION;
-							}
+							$this->unlockNode($id, $schema);
+							if($is_order) $this->unlockSchema($schema);
+
+							return DIV_NODES_ROLLBACK_TRANSACTION;
 						}
 					}
 				}
 			}
+		}
 
-			$r = $this->triggerAfterDel($id, $schema);
+		$r = $this->triggerAfterDel($id, $schema);
 
-			if($r === DIV_NODES_ROLLBACK_TRANSACTION)
+		if($r === DIV_NODES_ROLLBACK_TRANSACTION)
+		{
+			foreach($restore as $rest)
 			{
-				foreach($restore as $rest)
+				if($this->existsNode($rest['id'], $rest['schema']))
 				{
-					if($this->existsNode($rest['id'], $rest['schema']))
-					{
-						$this->setNode($rest['id'], $rest['node'], $rest['schema']);
-					}
-					else
-					{
-						$this->addNode($rest['node'], $rest['id'], $rest['schema']);
-					}
+					$this->setNode($rest['id'], $rest['node'], $rest['schema']);
 				}
-
-				return DIV_NODES_ROLLBACK_TRANSACTION;
-			}
-
-			// Delete the node
-			unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id"));
-
-			// Delete indexes
-			$idx_path = DIV_NODES_ROOT . "/$schema/$id.idx";
-			if(file_exists($idx_path))
-			{
-				$idx = unserialize(file_get_contents($idx_path));
-
-				if(isset($idx['indexes'])) foreach($idx['indexes'] as $word_schema => $index_id)
+				else
 				{
-					$this->delNode($index_id, $word_schema);
+					$this->addNode($rest['node'], $rest['id'], $rest['schema']);
 				}
-
-				unlink(self::clearDoubleSlashes($idx_path));
 			}
 
 			$this->unlockNode($id, $schema);
+			if($is_order) $this->unlockSchema($schema);
 
-			// record stats
-			$full_path = DIV_NODES_ROOT . $schema . "/$id";
-			if( ! (pathinfo($full_path, PATHINFO_EXTENSION) == "idx" && file_exists(substr($full_path, 0, strlen($full_path) - 4))))
-			{
-				$this->changeStats('{count} -= 1', $schema);
-			}
-
-			return true;
+			return DIV_NODES_ROLLBACK_TRANSACTION;
 		}
 
-		return false;
+		// check if is order node (double linked node)
+		if($is_order)
+		{
+			if(isset($node['previous']) && isset($node['next']))
+			{
+				if($node['previous'] === false && $node['next'] === false) // is the only one
+				{
+					$this->setOrderFirst($schema, '');
+					$this->setOrderLast($schema, '');
+				}
+
+				if($node['previous'] === false && $node['next'] !== false) // is the first
+				{
+					// update the new first
+					$next             = $this->getNode($node['next'], $schema);
+					$next['previous'] = false;
+					$this->putNode($node['next'], $next, $schema);
+					$this->setOrderFirst($schema, $node['next']);
+				}
+
+				if($node['next'] === false && $node['previous'] !== false) // is the last
+				{
+					// update the new last
+					$previous             = $this->getNode($node['previous'], $schema);
+					$previous['next'] = false;
+					$this->putNode($node['previous'], $previous, $schema);
+					$this->setOrderLast($schema, $node['previous']);
+				}
+
+				if($node['next'] !== false && $node['previous'] !== false) // is in the middle
+				{
+					$previous         = $this->getNode($node['previous'], $schema);
+					$next             = $this->getNode($node['next'], $schema);
+					$previous['next'] = $node['next'];
+					$next['previous'] = $node['previous'];
+					$this->putNode($node['next'], $next, $schema);
+					$this->putNode($node['previous'], $previous, $schema);
+				}
+			}
+		}
+
+		// Delete the node
+		unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id"));
+
+		// Delete indexes
+		$idx_path = DIV_NODES_ROOT . "/$schema/$id.idx";
+		if(file_exists($idx_path))
+		{
+			$idx = unserialize(file_get_contents($idx_path));
+
+			if(isset($idx['indexes'])) foreach($idx['indexes'] as $word_schema => $index_id)
+			{
+				$this->delNode($index_id, $word_schema);
+			}
+
+			unlink(self::clearDoubleSlashes($idx_path));
+		}
+
+		$this->unlockNode($id, $schema);
+
+		if($is_order) $this->unlockSchema($schema);
+
+		// record stats
+		$full_path = DIV_NODES_ROOT . $schema . "/$id";
+		if( ! (pathinfo($full_path, PATHINFO_EXTENSION) == "idx" && file_exists(substr($full_path, 0, strlen($full_path) - 4))))
+		{
+			$this->changeStats('{count} -= 1', $schema);
+		}
+
+		return true;
+
 	}
 
 	/**
-	 * Know if node are lock
+	 * Know if node are locked
 	 *
 	 * @param mixed  $id
 	 * @param string $schema
@@ -430,9 +476,24 @@ class divNodes
 	 */
 	public function isLockNode($id, $schema = null)
 	{
+		$schema = is_null($schema) ? $this->schema : $schema;
+
 		return file_exists(DIV_NODES_ROOT . $schema . "/" . $id . ".lock");
 	}
 
+	/**
+	 * Know if a schema are locked
+	 *
+	 * @param string $schema
+	 *
+	 * @return bool
+	 */
+	public function isLockSchema($schema = null)
+	{
+		$schema = is_null($schema) ? $this->schema : $schema;
+
+		return file_exists(DIV_NODES_ROOT . $schema . "/.lock");
+	}
 
 	/**
 	 * Lock a node
@@ -446,6 +507,22 @@ class divNodes
 	{
 		if(is_null($schema)) $schema = $this->schema;
 		$r = @file_put_contents(DIV_NODES_ROOT . $schema . "/" . $id . ".lock", '');
+
+		return $r !== false;
+	}
+
+
+	/**
+	 * Lock schema
+	 *
+	 * @param string $schema
+	 *
+	 * @return bool
+	 */
+	private function lockSchema($schema = null)
+	{
+		if(is_null($schema)) $schema = $this->schema;
+		$r = @file_put_contents(DIV_NODES_ROOT . $schema . "/.lock", '');
 
 		return $r !== false;
 	}
@@ -468,6 +545,20 @@ class divNodes
 		if(is_null($schema)) $schema = $this->schema;
 
 		return @unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id.lock"));
+	}
+
+	/**
+	 * Unlock schema
+	 *
+	 * @param null $schema
+	 *
+	 * @return bool
+	 */
+	private function unlockSchema($schema = null)
+	{
+		if(is_null($schema)) $schema = $this->schema;
+
+		return @unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/.lock"));
 	}
 
 	/**
@@ -532,13 +623,14 @@ class divNodes
 	/**
 	 * Return a node
 	 *
-	 * @param mixed  $id
-	 * @param string $schema
-	 * @param mixed  $default
+	 * @param mixed   $id
+	 * @param string  $schema
+	 * @param mixed   $default
+	 * @param boolean $keepLocked
 	 *
 	 * @return mixed
 	 */
-	public function getNode($id, $schema = null, $default = null)
+	public function getNode($id, $schema = null, $default = null, $keepLocked = false)
 	{
 		if(is_null($schema)) $schema = $this->schema;
 
@@ -565,7 +657,7 @@ class divNodes
 		if($data === false) // the node not exists ...
 		{
 			// ... unlock and return default
-			$this->unlockNode($id, $schema);
+			if( ! $keepLocked) $this->unlockNode($id, $schema);
 
 			return $default;
 		}
@@ -573,7 +665,7 @@ class divNodes
 		$node = unserialize($data);
 
 		// unlock ...
-		$this->unlockNode($id, $schema);
+		if( ! $keepLocked) $this->unlockNode($id, $schema);
 
 		return $node;
 	}
@@ -1802,10 +1894,13 @@ class divNodes
 
 	public function getOrderFirst($schemaTag)
 	{
-		return $this->getNode('.first', $schemaTag, false);
+		$first = $this->getNode('.first', $schemaTag, false);
+		if($first !== false) if(empty($first['id'])) $first = false;
+
+		return $first;
 	}
 
-	public function setOrderFirst($schemaTag, $orderId)
+	private function setOrderFirst($schemaTag, $orderId)
 	{
 		$this->putNode('.first', [
 			'id' => $orderId,
@@ -1813,7 +1908,7 @@ class divNodes
 		], $schemaTag);
 	}
 
-	public function setOrderLast($schemaTag, $orderId)
+	private function setOrderLast($schemaTag, $orderId)
 	{
 		$this->putNode('.last', [
 			'id' => $orderId,
@@ -1823,7 +1918,10 @@ class divNodes
 
 	public function getOrderLast($schemaTag)
 	{
-		return $this->getNode('.last', $schemaTag, false);
+		$last = $this->getNode('.last', $schemaTag, false);
+		if($last !== false) if(empty($last['id'])) $last = false;
+
+		return $last;
 	}
 
 	/**
@@ -1845,6 +1943,13 @@ class divNodes
 		$schemaTag = "$schemaOrder/$tag";
 
 		$this->addSchema($schemaTag);
+
+		// wait for unlocked list
+		$sec = 0;
+		while($this->isLockSchema($schemaTag) || $sec > 999999) $sec ++;
+
+		$this->lockSchema($schemaTag);
+
 		$newNode = false;
 		$orderId = md5("$schema/$nodeId");
 		$first   = $this->getOrderFirst($schemaTag);
@@ -1945,9 +2050,12 @@ class divNodes
 		{
 			$this->addNode($newNode, $orderId, $schemaTag);
 			$this->addInverseIndex($nodeId, $schema, $orderId, $schemaTag);
+			$this->unlockSchema($schemaTag);
 
 			return true;
 		}
+
+		$this->unlockSchema($schemaTag);
 
 		return false;
 	}
@@ -2009,7 +2117,6 @@ class divNodes
 				$current     = $fromFirst ? $currentNode['next'] : $currentNode['previous'];
 				$currentNode = $current !== false ? $this->getNode($current, $schemaTag) : null;
 
-				$iterator ++;
 			} while($current !== false && ($iterator < $limit || $limit == - 1));
 		}
 

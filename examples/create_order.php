@@ -37,7 +37,7 @@ $cities = [
 // Deleting all nodes in schema database/contacts
 echo "Clear all CONTACTS ... \n";
 $db->delNodes();
-die();
+//die();
 // Populate persons for each city
 echo "Populating database with random contacts\n";
 $stats = [];
@@ -80,9 +80,10 @@ $db->forEachNode(function($node, $id, $schema, $db, $otherData)
 	return DIV_NODES_FOR_CONTINUE_DISCARDING;
 });
 
-/*
-$db->foreachOrder('name', function($order, $nodeId){
+
+$db->foreachOrder(function($order, $iterator)
+{
 	global $db;
-	$node = $db->getNode($nodeId);
-	echo $node['name']."\n";
-});*/
+	$node = $db->getNode($order['id'], $order['schema']);
+	echo "$iterator - " . $node['name'] . "\n";
+}, 'name');
