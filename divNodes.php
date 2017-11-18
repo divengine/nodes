@@ -70,7 +70,7 @@ class divNodes
 	 */
 	protected final function isReservedId($id)
 	{
-		return $id == '.references' || $id == '.index' || $id == '.stats' || $id == '.first' || $id == '.last';
+		return $id == '.references' || $id == '.index' || $id == '.stats' || $id == '.first' || $id == '.last' || $id == '.lock';
 	}
 
 	/**
@@ -416,7 +416,7 @@ class divNodes
 				if($node['next'] === false && $node['previous'] !== false) // is the last
 				{
 					// update the new last
-					$previous             = $this->getNode($node['previous'], $schema);
+					$previous         = $this->getNode($node['previous'], $schema);
 					$previous['next'] = false;
 					$this->putNode($node['previous'], $previous, $schema);
 					$this->setOrderLast($schema, $node['previous']);
@@ -1759,6 +1759,8 @@ class divNodes
 	 */
 	public function reStats($schema = null)
 	{
+		if(is_null($schema)) $schema = $this->schema;
+
 		$stats = $this->defaultStats();
 
 		// 'count' stat
@@ -1892,6 +1894,13 @@ class divNodes
 
 	}
 
+	/**
+	 * Return the first node in order's schema
+	 *
+	 * @param string $schemaTag
+	 *
+	 * @return bool|mixed
+	 */
 	public function getOrderFirst($schemaTag)
 	{
 		$first = $this->getNode('.first', $schemaTag, false);
@@ -1900,22 +1909,45 @@ class divNodes
 		return $first;
 	}
 
+	/**
+	 * Set the first node in order's schema
+	 *
+	 * @param string $schemaTag
+	 * @param string $orderId
+	 *
+	 * @return mixed
+	 */
 	private function setOrderFirst($schemaTag, $orderId)
 	{
-		$this->putNode('.first', [
+		return $this->putNode('.first', [
 			'id' => $orderId,
 			'last_update' => date("Y-m-d h:i:s")
 		], $schemaTag);
 	}
 
+	/**
+	 * Set the last node in order's schema
+	 *
+	 * @param string $schemaTag
+	 * @param string $orderId
+	 *
+	 * @return mixed
+	 */
 	private function setOrderLast($schemaTag, $orderId)
 	{
-		$this->putNode('.last', [
+		return $this->putNode('.last', [
 			'id' => $orderId,
 			'last_update' => date("Y-m-d h:i:s")
 		], $schemaTag);
 	}
 
+	/**
+	 * Return the last node in order's schema
+	 *
+	 * @param $schemaTag
+	 *
+	 * @return bool|mixed
+	 */
 	public function getOrderLast($schemaTag)
 	{
 		$last = $this->getNode('.last', $schemaTag, false);
