@@ -1629,7 +1629,8 @@ class divNodes
 
 		$results = [];
 
-		$words = $this->getWords($phrase);
+		$words            = $this->getWords($phrase);
+		$words[ $phrase ] = $phrase;
 
 		foreach($words as $word)
 		{
