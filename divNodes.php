@@ -686,9 +686,16 @@ class divNodes
 
 		if( ! $this->existsSchema($schema)) return false;
 
+		$setter = function ($d) {return $d;};
+
+		if (is_callable($data))
+		{
+			$setter = $data;
+			$data = null;
+		}
+
 		if($this->existsNode($id, $schema)) $node = $this->getNode($id, $schema);
-		else
-			$node = $data;
+		else $node = $data;
 
 		$r = $this->triggerBeforeSet($id, $node, $data);
 		if($r === DIV_NODES_ROLLBACK_TRANSACTION) return DIV_NODES_ROLLBACK_TRANSACTION;
@@ -699,13 +706,7 @@ class divNodes
 		$this->lockNode($id, $schema);
 
 		$old = $node;
-
-		$setter = function ($d) {return $d;};
-
-		if (is_callable($data))
-			$setter = $data;
-
-		$data = $setter($data);
+		$data = $setter($node);
 
 		if($cop) $node = self::cop($node, $data); // update the node
 		else $node = $data; // replace node
