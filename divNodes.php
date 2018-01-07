@@ -674,7 +674,7 @@ class divNodes
 	 * Update data of a node
 	 *
 	 * @param mixed   $id
-	 * @param mixed   $data
+	 * @param mixed   $data   Any data or closure function
 	 * @param string  $schema
 	 * @param boolean $cop
 	 *
@@ -699,6 +699,14 @@ class divNodes
 		$this->lockNode($id, $schema);
 
 		$old = $node;
+
+		$setter = function ($d) {return $d;};
+
+		if (is_callable($data))
+			$setter = $data;
+
+		$data = $setter($data);
+
 		if($cop) $node = self::cop($node, $data); // update the node
 		else $node = $data; // replace node
 
@@ -709,6 +717,8 @@ class divNodes
 		if($r === DIV_NODES_ROLLBACK_TRANSACTION) file_put_contents($schema . "/$id", serialize($old));
 
 		$this->unlockNode($id, $schema);
+
+		return $node;
 	}
 
 	/**
@@ -725,6 +735,15 @@ class divNodes
 		return $this->setNode($id, $data, $schema, false);
 	}
 
+	/**
+	 * For overload: Trigger this function before set a node
+	 *
+	 * @param $id
+	 * @param $node
+	 * @param $data
+	 *
+	 * @return bool
+	 */
 	public function triggerBeforeSet($id, &$node, &$data)
 	{
 		return true;
@@ -2208,4 +2227,79 @@ class divNodes
 
 		return $node;
 	}
+
+    /**
+     * Return the root node in tree's schema
+     *
+     * @param string $schemaTag
+     *
+     * @return bool|mixed
+     */
+    public function getTreeRoot($schemaTag)
+    {
+        $first = $this->getNode('.root', $schemaTag, false);
+        if($first !== false) if(empty($first['id'])) $first = false;
+
+        return $first;
+    }
+
+    /**
+     * Set the root node in tree's schema
+     *
+     * @param string $schemaTag
+     * @param string $nodeId
+     *
+     * @return mixed
+     */
+    private function setTreeRoot($schemaTag, $nodeId)
+    {
+        return $this->putNode('.root', [
+            'id' => $nodeId,
+            'last_update' => date("Y-m-d h:i:s")
+        ], $schemaTag);
+    }
+
+	public function addBinaryNode($value, $nodeId, $tag = 'default', $schema = null, $schemaTree = null)
+    {
+        if(is_null($schema)) $schema = $this->schema;
+        if(is_null($schemaTree)) $schemaTree = $schema . "/.tree";
+
+        $schemaTag = "$schemaTree/$tag";
+
+        $this->addSchema($schemaTag);
+
+        // wait for unlocked list
+        $sec = 0;
+        while($this->isLockSchema($schemaTag) || $sec > 999999) $sec ++;
+
+        $this->lockSchema($schemaTag);
+
+        $root = $this->getTreeRoot($schemaTag);
+        $newNode = false;
+        $binaryNodeId = md5("$schema/$nodeId");
+
+        // check if no nodes
+        if($root === false) // an empty tree
+        {
+            // insert the first
+            $this->setTreeRoot($schemaTag, $binaryNodeId);
+
+            $newNode = [
+                "schema" => $schema,
+                "id" => $nodeId,
+                "left" => false,
+                "right" => false,
+                'last_update' => date("Y-m-d h:i:s")
+            ];
+        } else
+        {
+            $current = $root;
+
+        }
+        if ($root === false)
+        {
+            //$this->addNode()
+        }
+
+    }
 }
