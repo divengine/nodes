@@ -686,7 +686,7 @@ class divNodes
 
 		if( ! $this->existsSchema($schema)) return false;
 
-		$setter = function ($d) {return $d;};
+		$setter = null;
 
 		if (is_callable($data))
 		{
@@ -706,9 +706,9 @@ class divNodes
 		$this->lockNode($id, $schema);
 
 		$old = $node;
-		$data = $setter($node);
+		if (!is_null($setter)) $data = $setter($node);
 
-		if($cop) $node = self::cop($node, $data); // update the node
+		if ($cop) $node = self::cop($node, $data); // update the node
 		else $node = $data; // replace node
 
 		file_put_contents(DIV_NODES_ROOT . $schema . "/$id", serialize($node));
