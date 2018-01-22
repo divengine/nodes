@@ -2303,4 +2303,94 @@ class divNodes
         }
 
     }
+
+	/**
+	 * Wait for a turn in the queue and do something
+	 *
+	 * @param $queueFolder
+	 * @param $closure
+	 * @param $params
+	 * @param int $thread_max_execution_time
+	 * @param null $threadId
+	 * @throws Exception
+	 *
+	 * @return mixed
+	 */
+    public function waitAndDo($queueFolder, $closure, $params, $thread_max_execution_time = 60, $threadId = null)
+	{
+		if (is_null($threadId))
+			$threadId = uniqid(date("Ymdhis"), true);
+
+		@mkdir ($queueFolder);
+		file_put_contents("$queueFolder/$threadId", $thread_max_execution_time); // max execution time in seconds for this thread
+
+		$i = 0;
+		$last = null;
+		$file = null;
+		do
+		{
+			// current thread
+			$dir = opendir($queueFolder);
+			$file = readdir($dir);
+			if ($file == ".") $file = readdir($dir);
+			if ($file == "..") $file = readdir($dir);
+			closedir($dir);
+
+			if ($file == false)
+				throw new Exception("No access to the queue");
+
+			// si al mismo tiempo otro proceso ya borro el item actual, pues ignorar y continuar
+			$max = intval(@file_get_contents("$queueFolder/$file")); // obtengo el maximo tiempo del hilo actual
+
+			if ($file === $threadId) break; // es mi turno, detengo el ciclo
+
+			if ($last !== $file) $i = 0; // si otro hilo borro el item, renovar el conteo de max
+
+			$last = $file;
+
+			usleep(1000); //sleep 1/1000 seconds
+
+			$i++;
+
+			if ($i > $max * 100)
+			{
+				// ignorar si el archivo no existe
+				// release the item and continue
+				@unlink("$queueFolder/$file");
+				$i = 0;
+			}
+
+		} while($file !== false && $file !== $threadId);
+
+		// Turn for me...Do something...
+
+		$result = $closure($params);
+
+		// Done!
+
+		// Destroy thread in the queue
+		@unlink("$queueFolder/$threadId");
+
+		return $result;
+	}
+
+	/**
+	 * Wait for exclusive access to node, and do a closure
+	 *
+	 * @param $nodeId
+	 * @param $closure
+	 * @param $params
+	 * @param int $thread_max_execution_time
+	 * @param null $threadId
+	 * @param null $schema
+	 * @param string $queueSchema
+	 *
+	 * @return mixed
+	 */
+	public function waitForNodeAndDo($nodeId, $closure, $params, $thread_max_execution_time = 60, $threadId = null, $schema = null, $queueSchema = '.queue')
+	{
+		if (is_null($schema)) $schema = $this->schema;
+
+		return $this->waitAndDo("$schema/$queueSchema/$nodeId", $closure, $params, $thread_max_execution_time, $threadId);
+	}
 }
