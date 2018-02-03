@@ -53,7 +53,6 @@ class divNodes
 {
 	static $__log_mode = false;
 	static $__log_file = DIV_NODES_LOG_FILE;
-	static $__log_messages = [];
 	static $__version = 1.4;
 
 	private $__instance_id = null;
@@ -234,9 +233,6 @@ class divNodes
 	{
 		if (self::$__log_mode) {
 			$message = date("Y-m-d h:i:s") . "[$level] $message \n";
-			echo $message;
-			self::$__log_messages[] = $message;
-
 			$f = fopen(self::$__log_file, 'a');
 			fputs($f, $message);
 			fclose($f);
