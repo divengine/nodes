@@ -23,7 +23,7 @@
  *
  * @package com.divengine.nodes
  * @author  Rafa Rodriguez [@rafageist] <rafageist@hotmail.com>
- * @version 1.3
+ * @version 1.4
  *
  * @link    http://divengine.com
  * @link    http://github.com/divengine/div-nodes
@@ -54,7 +54,7 @@ class divNodes
 	static $__log_mode = false;
 	static $__log_file = DIV_NODES_LOG_FILE;
 	static $__log_messages = [];
-	static $__version = 1.3;
+	static $__version = 1.4;
 
 	private $__instance_id = null;
 	private $__triggers = [];
