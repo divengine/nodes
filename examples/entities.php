@@ -1,7 +1,7 @@
 <?php
 
 /**
-/**
+ * /**
  * Div PHP Nodes
  *
  * Example
@@ -12,25 +12,28 @@
 include "../divNodes.php";
 
 // Your entity
-class Person {
+class Person
+{
 	public $first_name;
 	public $last_name;
-	public function getFullName() {
+
+	public function getFullName()
+	{
 		return $this->first_name . " " . $this->last_name;
 	}
 }
 
 // Clear schema
-$db = new divNodes ( 'database' );
+$db = new divNodes ('database');
 
-$db->delNodes ();
+$db->delNodes();
 
 $person = new Person ();
 $person->first_name = "John";
 $person->last_name = "Nash";
 
 // Save entity
-$db->addNode ( $person );
+$db->addNode($person);
 
 $person = new Person ();
 
@@ -38,12 +41,12 @@ $person->first_name = "Albert";
 $person->last_name = "Einstein";
 
 // Save entity
-$db->addNode ( $person );
+$db->addNode($person);
 
-$entities = $db->getNodes ( array (
-		'order' => 'first_name' 
-) );
+$entities = $db->getNodes(array(
+	'order' => 'first_name'
+));
 
-foreach ( $entities as $e ) {
-	echo $e->getFullName () . "<br/>\n";
+foreach ($entities as $e) {
+	echo $e->getFullName() . "<br/>\n";
 }

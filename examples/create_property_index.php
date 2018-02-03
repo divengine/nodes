@@ -39,6 +39,9 @@ $cities = [
 echo "Clear all CONTACTS ... \n";
 $db->delNodes();
 
+$idxCity = 'database/index/contacts/city';
+$db->delSchema($idxCity);
+
 // Populate persons for each city
 echo "Populating database with random contacts\n";
 $stats = [];
@@ -69,8 +72,7 @@ echo "TOTAL = $total \n\n";
 // Create index of object's property
 echo "Creating index for CITY property of CONTACTS ...\n";
 
-$idxCity = 'database/index/contacts/city';
-$db->delSchema($idxCity);
+
 $db->createIndex(function($node) { return $node['city']; }, null, $idxCity, true);
 
 // Search people LIMIT = 10
