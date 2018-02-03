@@ -232,7 +232,7 @@ class divNodes
 	static function log($message, $level = "INFO")
 	{
 		if (self::$__log_mode) {
-			$message = date("Y-m-d h:i:s") . "[$level] $message \n";
+			$message = date("Y-m-d h:i:s") . self::getGlobalThreadId() . " - [$level] $message \n";
 			$f = fopen(self::$__log_file, 'a');
 			fputs($f, $message);
 			fclose($f);
@@ -780,8 +780,13 @@ class divNodes
 	{
 		if (is_null($schema)) $schema = $this->schema;
 
-		if (file_exists(DIV_NODES_ROOT . $schema . "/$id")) {
-			if (!is_dir(DIV_NODES_ROOT . $schema . "/$id")) return true;
+		$fullPath = DIV_NODES_ROOT . $schema . "/$id";
+
+		self::log("->existsNode($id, $schema): $fullPath");
+
+		if (file_exists($fullPath)) {
+			if ( ! is_dir($fullPath)) return true;
+			self::log("---> $fullPath is a folder");
 		}
 
 		return false;
