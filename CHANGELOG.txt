@@ -5,6 +5,7 @@ Feb 3, 2018
 - Setting nodes with closures
 - Creating pre-saved orders
 - Trash collector for performance goals
+- Multi-triggers / triggers as closures
 
 ----------------------------
 Oct 22, 2017
