@@ -56,9 +56,10 @@ class divNodes
 	static $__log_messages = [];
 	static $__version = 1.3;
 
+	private $__instance_id = null;
 	private $__triggers = [];
-	private $__trash = [];
 
+	static $__trash = [];
 	static $__global_thread_id = null;
 
 	var $schema = null;
@@ -71,8 +72,21 @@ class divNodes
 	 */
 	public function __construct($schema)
 	{
-		self::log("CURRENT THREAD ID: " . $this->getThreadID());
 		$this->setSchema($schema);
+		self::log("New instance ".$this->getInstanceId(). " - THREAD ID: " . $this->getThreadID(). " - schema: $schema");
+	}
+
+	/**
+	 * Return the ID of current instance (generate it if not exists)
+	 *
+	 * @return string
+	 */
+	public function getInstanceId()
+	{
+		if (is_null($this->__instance_id))
+			$this->__instance_id = uniqid(date("Ymdhis"), true);
+
+		return $this->__instance_id;
 	}
 
 	/**
@@ -2212,8 +2226,7 @@ class divNodes
 		]);
 
 		// trash collector
-
-		$this->trash(function ($params) {
+		self::trash($this->getInstanceId(), function ($params) {
 
 			$schema = $params['schema'];
 			$queueSchema = $params['queueSchema'];
@@ -2238,12 +2251,16 @@ class divNodes
 	/**
 	 * Save trash operation
 	 *
+	 * @param string $instanceId
 	 * @param closure $closure
 	 * @param array $params
 	 */
-	private function trash($closure, $params = [])
+	private static function trash($instanceId, $closure, $params = [])
 	{
-		$this->__trash[] = [
+		if (!isset(self::$__trash[$instanceId]))
+			self::$__trash[$instanceId] = [];
+
+		self::$__trash[$instanceId][] = [
 			'f' => $closure,
 			'p' => $params
 		];
@@ -2251,11 +2268,18 @@ class divNodes
 
 	/**
 	 * Execute trash operations
+	 *
+	 * @param string $instanceId
 	 */
-	public function emptyTrash()
+	public static function emptyTrash($instanceId)
 	{
-		foreach ($this->__trash as $t)
+		if (!isset(self::$__trash[$instanceId]))
+			self::$__trash[$instanceId] = [];
+
+		foreach (self::$__trash[$instanceId] as $t)
 			$t['f']($t['p']);
+
+		self::$__trash[$instanceId] = [];
 	}
 
 	/**
@@ -2264,6 +2288,6 @@ class divNodes
 	public function __destruct()
 	{
 		// execute trash operations
-		$this->emptyTrash();
+		self::emptyTrash($this->getInstanceId());
 	}
 }
