@@ -210,6 +210,21 @@ class divNodes
 	}
 
 	/**
+	 * Switch logs to ON
+	 */
+	static function logOn()
+	{
+		self::$__log_mode = true;
+	}
+
+	/**
+	 * Switch logs to OFF
+	 */
+	static function logOff()
+	{
+		self::$__log_mode = false;
+	}
+	/**
 	 * Log messages
 	 *
 	 * @param string $message
