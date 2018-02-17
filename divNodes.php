@@ -223,6 +223,7 @@ class divNodes
 	{
 		self::$__log_mode = false;
 	}
+
 	/**
 	 * Log messages
 	 *
@@ -232,7 +233,7 @@ class divNodes
 	static function log($message, $level = "INFO")
 	{
 		if (self::$__log_mode) {
-			$message = date("Y-m-d h:i:s") . self::getGlobalThreadId() . " - [$level] $message \n";
+			$message = date("Y-m-d h:i:s") . ' - ' . self::getGlobalThreadId() . " - [$level] $message \n";
 			$f = fopen(self::$__log_file, 'a');
 			fputs($f, $message);
 			fclose($f);
