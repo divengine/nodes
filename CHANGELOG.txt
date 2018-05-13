@@ -1,4 +1,10 @@
 ----------------------------
+May 13, 2018
+----------------------------
+- Important bugfix when create a queue folders without permission to write
+- Improve addSchema method
+
+----------------------------
 Feb 3, 2018
 ----------------------------
 - Better concurrent access control based on queues

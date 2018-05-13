@@ -145,16 +145,7 @@ class divNodes
 	 */
 	public function addSchema($schema)
 	{
-	    mkdir(self::clearDoubleSlashes(DIV_NODES_ROOT. "/". $schema), 0777, true);
-
-		/*$arr = explode("/", $schema);
-		$path = DIV_NODES_ROOT;
-		foreach ($arr as $d) {
-			$path .= "$d/";
-			if (!file_exists($path)) {
-				mkdir($path);
-			}
-		}*/
+	    @mkdir(self::clearDoubleSlashes(DIV_NODES_ROOT. "/". $schema), 0777, true);
 	}
 
 	/**
