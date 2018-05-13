@@ -145,14 +145,16 @@ class divNodes
 	 */
 	public function addSchema($schema)
 	{
-		$arr = explode("/", $schema);
+	    mkdir(self::clearDoubleSlashes(DIV_NODES_ROOT. "/". $schema), 0777, true);
+
+		/*$arr = explode("/", $schema);
 		$path = DIV_NODES_ROOT;
 		foreach ($arr as $d) {
 			$path .= "$d/";
 			if (!file_exists($path)) {
 				mkdir($path);
 			}
-		}
+		}*/
 	}
 
 	/**
@@ -2216,7 +2218,7 @@ class divNodes
 			$queueFolder = date("Ymdhis") . uniqid("", true);
 			file_put_contents(DIV_NODES_ROOT . "$schema/$queueSchema/$nodeId", $queueFolder);
 			file_put_contents(DIV_NODES_ROOT . "$schema/$queueSchema/$queueFolder.idx", $nodeId);
-			@mkdir(DIV_NODES_ROOT . "$schema/$queueSchema/$queueFolder", true);
+			@mkdir(DIV_NODES_ROOT . "$schema/$queueSchema/$queueFolder", 0777,true);
 		}
 
 		$queueFolder = file_get_contents(DIV_NODES_ROOT . "$schema/$queueSchema/$nodeId");
