@@ -2145,8 +2145,7 @@ class divNodes
 			// current thread
 			$dir = opendir($queueFolder);
 			$file = readdir($dir);
-			if ($file == ".") $file = readdir($dir);
-			if ($file == "..") $file = readdir($dir);
+            while ($file == '.' || $file == '..') $file = @readdir($dir);
 			closedir($dir);
 
 			if ($file == false)
@@ -2221,8 +2220,7 @@ class divNodes
 			if ($dir === false) return true;
 
 			$file = @readdir($dir);
-			if ($file == ".") $file = @readdir($dir);
-			if ($file == "..") $file = @readdir($dir);
+            while ($file == '.' || $file == '..') $file = @readdir($dir);
 			closedir($dir);
 
 			if ($file === false) return true;
