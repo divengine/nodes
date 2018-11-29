@@ -44,9 +44,10 @@ $person->last_name = "Einstein";
 $db->addNode($person);
 
 $entities = $db->getNodes(array(
-	'order' => 'first_name'
+    'offset' => 0,
+    'limit' => 1
 ));
-
+var_dump($entities);
 foreach ($entities as $e) {
 	echo $e->getFullName() . "<br/>\n";
 }

@@ -41,7 +41,7 @@ $db->delNodes();
 // Populate persons for each city
 echo "Populating database with random contacts\n";
 $stats = [];
-$total = rand(10, 10);
+$total = 1000; //rand(10, 1000);
 for($i = 0; $i < $total; $i ++)
 {
 	$city_code = array_rand($cities, 1);
@@ -72,6 +72,8 @@ $idxCity = 'database/index/contacts/city';
 $db->delSchema($idxCity);
 $db->createIndex(function($node) { return $node['city']; }, null, $idxCity, true);
 
+// Create order for name property
+$t1 = microtime(true);
 $db->forEachNode(function($node, $id, $schema, $db, $otherData)
 {
 	echo "Order for CITY = {$node['name']} ID = $id \n";
@@ -79,11 +81,14 @@ $db->forEachNode(function($node, $id, $schema, $db, $otherData)
 
 	return DIV_NODES_FOR_CONTINUE_DISCARDING;
 });
+$t2 = microtime(true);
 
-
+// Show ordered list
 $db->foreachOrder(function($order, $iterator)
 {
 	global $db;
 	$node = $db->getNode($order['id'], $order['schema']);
 	echo "$iterator - " . $node['name'] . "\n";
 }, 'name');
+
+echo "Orders created in ".number_format($t2-$t1, 5)."secs\n";
