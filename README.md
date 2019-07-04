@@ -1,4 +1,4 @@
-# Div PHP Nodes 1.4
+# Div PHP Nodes 2.0.0
 No-SQL Database System for PHP
 
 Library for storage relational and serialized data 
@@ -42,13 +42,30 @@ The class may also:
 - index the node's content for full text search
 - store statistics, and update it dynamically 
 
+## Documentation
+https://github.com/divengine/nodes/wiki
+
+## Installation
+
+With composer...
+```
+composer require divengine/nodes
+```
+
+Without composer, download the class and...
+
+```php
+include "path/to/divengine/nodes.php";
+```
+
 ## Basic usage
 
 ```php
 <?php
 
-include 'divNodes.php';
-$db = new divNodes("database/contacts");
+use divengine/nodes;
+
+$db = new nodes("database/contacts");
 
 $id = $db->addNode(array(
     "name" => "Peter",
@@ -65,4 +82,12 @@ $contact = $db->getNode($id);
 $db->delNode($id);
 ```
 
-For more details you can see the examples.
+Enjoy!
+
+-- 
+
+@rafageist
+
+Eng. Rafa Rodriguez
+
+https://rafageist.github.io

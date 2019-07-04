@@ -1,6 +1,2 @@
-.settings/*
-.buildpath
-.project
-.htpasswd
 .idea/*
-examples/database/*
+examples/*
