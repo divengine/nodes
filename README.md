@@ -67,15 +67,15 @@ use divengine/nodes;
 
 $db = new nodes("database/contacts");
 
-$id = $db->addNode(array(
+$id = $db->addNode([
     "name" => "Peter",
     "age" => 25
-));
+]);
 
-$db->setNode($id, array(
+$db->setNode($id, [
     "email" => "peter@email.com",
     "phone" => "+1222553335"
-));
+]);
 
 $contact = $db->getNode($id);
 
