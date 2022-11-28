@@ -88,6 +88,4 @@ Enjoy!
 
 @rafageist
 
-Eng. Rafa Rodriguez
-
-https://rafageist.divengine.com
+https://rafageist.com
