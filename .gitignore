@@ -1,2 +1,8 @@
 .idea/*
 examples/*
+data/*
+vendor/*
+.phpunit.result.cache
+composer.lock
+.vscode
+docs

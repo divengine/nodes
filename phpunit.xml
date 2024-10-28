@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/11.0/phpunit.xsd"
+		bootstrap="tests/bootstrap.php"
+		executionOrder="depends,defects"
+		failOnRisky="true"
+		displayDetailsOnTestsThatTriggerWarnings="true"
+		failOnWarning="true"
+		colors="true">
+	<testsuites>
+		<testsuite name="divengine">
+			<directory>tests/nodes</directory>
+		</testsuite>
+	</testsuites>
+	<php>
+		<ini name="strict_types" value="1"/>
+		<ini name="error_reporting" value="-1"/>
+		<ini name="memory_limit" value="-1"/>
+		<env name="database_relative_path" value="data"/>
+	</php>
+</phpunit>

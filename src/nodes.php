@@ -1,6 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace divengine;
+
+use Closure;
+use Exception;
 
 /**
  * [[]] Div PHP Nodes
@@ -24,10 +29,10 @@ namespace divengine;
  * https://www.gnu.org/licenses/gpl-3.0.txt
  *
  * @package divengine/nodes
- * @author  Rafa Rodriguez [@rafageist] <rafageist@hotmail.com>
- * @version 2.0
+ * @author  Rafa Rodriguez [@rafageist] <rafageist@divengine.com>
+ * @version 3.0.0
  *
- * @link    https://divengine.com
+ * @link    https://divengine.org
  * @link    https://github.com/divengine/nodes
  * @link    https://github.com/divengine/nodes/wiki
  */
@@ -37,7 +42,7 @@ if (!defined("DIV_NODES_ROOT")) {
     define("DIV_NODES_ROOT", "./");
 }
 if (!defined("DIV_NODES_LOG_FILE")) {
-    define("DIV_NODES_LOG_FILE", DIV_NODES_ROOT."/divNodes.log");
+    define("DIV_NODES_LOG_FILE", DIV_NODES_ROOT . "/nodes.log");
 }
 
 define("DIV_NODES_FOR_BREAK", "DIV_NODES_FOR_BREAK");
@@ -53,46 +58,53 @@ define("DIV_NODES_TRIGGER_AFTER_SET", '__trigger_after_set');
 define("DIV_NODES_TRIGGER_BEFORE_DEL", '__trigger_before_del');
 define("DIV_NODES_TRIGGER_AFTER_DEL", '__trigger_after_del');
 
+define("DIV_NODES_STATS_FOLDER", '.stats');
+define("DIV_NODES_INDEX_FOLDER", '.index');
+define("DIV_NODES_FIRST_NODE", '.first');
+define("DIV_NODES_LAST_NODE", '.last');
+define("DIV_NODES_LOCK_NODE", '.lock');
+define("DIV_NODES_ORDER_FOLDER", '.order');
+define("DIV_NODES_REFERENCES_FOLDER", '.references');
+define("DIV_NODES_INVALID_FILENAME_CHARS", ['\\', '/', ':', '*', '?', '"', '<', '>', '|']);
+define("DIV_NODES_INDEX_FILE_EXTENSION", 'idx');
+define("DIV_NODES_LOCK_FILE_EXTENSION", 'lock');
 /**
  * Class divNodes
  */
 class nodes
 {
+    static bool $__log_mode = false;
 
-    static $__log_mode = false;
+    static string $__log_file = DIV_NODES_LOG_FILE;
 
-    static $__log_file = DIV_NODES_LOG_FILE;
+    static string $__version = '3.0.0';
 
-    static $__version = '2.0.0';
+    private ?string $__instance_id = null;
 
-    private $__instance_id = null;
+    private array $__triggers = [];
 
-    private $__triggers = [];
+    private array $__indexers = [];
 
-    static $__trash = [];
+    static array $__trash = [];
 
-    static $__global_thread_id = null;
-
-    var $schema = null;
-
+    private ?string $schema = null;
 
     /**
      * Constructor
      *
      * @param string $schema
      */
-    public function __construct($schema)
+    public function __construct(string $schema)
     {
         $this->setSchema($schema);
-        self::log("New instance ".$this->getInstanceId()." - THREAD ID: ".$this->getThreadID()." - schema: $schema");
     }
 
     /**
      * Get current version
      *
-     * @return float
+     * @return string
      */
-    public function getVersion()
+    public function getVersion(): string
     {
         return self::$__version;
     }
@@ -102,53 +114,27 @@ class nodes
      *
      * @return string
      */
-    public function getInstanceId()
+    public function getInstanceId(): string
     {
-        if (is_null($this->__instance_id)) {
-            $this->__instance_id = uniqid(date("Ymdhis"), true);
-        }
-
+        $this->__instance_id ??= self::generateUUIDv4();
         return $this->__instance_id;
-    }
-
-    /**
-     * Return global process id
-     *
-     * @return null|string
-     */
-    static function getGlobalThreadId()
-    {
-        if (self::$__global_thread_id === null) {
-            // getmypid(): Process IDs are not unique, thus they are a weak entropy source.
-            // We recommend against relying on pids in security-dependent contexts.
-
-            //... generate an id for current PHP proccess
-            self::$__global_thread_id = uniqid(date("Ymdhis"), true);
-        }
-
-        return self::$__global_thread_id;
-    }
-
-    /**
-     * Return current thread ID
-     *
-     * @return null|string
-     */
-    public function getThreadID()
-    {
-        return self::getGlobalThreadId();
     }
 
     /**
      * Protect some IDs in schemas
      *
-     * @param $id
+     * @param string|int|float $id
      *
      * @return bool
      */
-    protected final function isReservedId($id)
+    protected final function isReservedId(string|int|float $id): bool
     {
-        return $id == '.references' || $id == '.index' || $id == '.stats' || $id == '.first' || $id == '.last' || $id == '.lock' || $id == '.queue' || $id == '.schema';
+        return $id == DIV_NODES_REFERENCES_FOLDER
+            || $id == DIV_NODES_INDEX_FOLDER
+            || $id == DIV_NODES_STATS_FOLDER
+            || $id == DIV_NODES_FIRST_NODE
+            || $id == DIV_NODES_LAST_NODE
+            || $id == DIV_NODES_LOCK_NODE;
     }
 
     /**
@@ -156,7 +142,7 @@ class nodes
      *
      * @param string $schema
      */
-    public function setSchema($schema)
+    public function setSchema(string $schema): void
     {
         $this->addSchema($schema);
         $this->schema = $schema;
@@ -166,10 +152,20 @@ class nodes
      * Add schema
      *
      * @param string $schema
+     * 
+     * @return bool
      */
-    public function addSchema($schema)
+    public function addSchema(string $schema): bool
     {
-        @mkdir(self::clearDoubleSlashes(DIV_NODES_ROOT."/".$schema), 0777, true);
+        $schemaPath = DIV_NODES_ROOT . "/" . $schema;
+
+        if (!file_exists($schemaPath)) {
+            $this->log("Adding schema $schema");
+            mkdir($schemaPath, 0777, true);
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -178,13 +174,11 @@ class nodes
      * @param string $schema
      * @param string $new_name
      *
-     * @return boolean
+     * @return bool
      */
-    public function renameSchema($new_name, $schema)
+    public function renameSchema(string $new_name, string $schema): bool
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
 
         if (!$this->existsSchema($schema)) {
             return false;
@@ -192,7 +186,7 @@ class nodes
 
         $restore = $schema === $this->schema;
 
-        rename(DIV_NODES_ROOT.$schema, DIV_NODES_ROOT.$new_name);
+        rename(DIV_NODES_ROOT . $schema, DIV_NODES_ROOT . $new_name);
 
         if ($restore) {
             $this->schema = $new_name;
@@ -206,16 +200,14 @@ class nodes
      *
      * @param string $schema
      *
-     * @return boolean
+     * @return bool
      */
-    public function existsSchema($schema = null)
+    public function existsSchema(?string $schema = null): bool
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
 
-        if (file_exists(DIV_NODES_ROOT.$schema)) {
-            if (is_dir(DIV_NODES_ROOT.$schema)) {
+        if (file_exists(DIV_NODES_ROOT . $schema)) {
+            if (is_dir(DIV_NODES_ROOT . $schema)) {
                 return true;
             }
         }
@@ -227,16 +219,20 @@ class nodes
 
     /**
      * Switch logs to ON
+     * 
+     * @return void
      */
-    static function logOn()
+    static function logOn(): void
     {
         self::$__log_mode = true;
     }
 
     /**
      * Switch logs to OFF
+     * 
+     * @return void
      */
-    static function logOff()
+    static function logOff(): void
     {
         self::$__log_mode = false;
     }
@@ -246,13 +242,20 @@ class nodes
      *
      * @param string $message
      * @param string $level
+     * 
+     * @return void
      */
-    static function log($message, $level = "INFO")
+    static function log(string $message, string $level = "INFO"): void
     {
         if (self::$__log_mode) {
-            $message = date("Y-m-d h:i:s").' - '.self::getGlobalThreadId()." - [$level] $message \n";
+            $message = date("Y-m-d h:i:s") . " - [$level] $message \n";
             $f = fopen(self::$__log_file, 'a');
-            fputs($f, $message);
+
+            if (flock($f, LOCK_EX)) {
+                fputs($f, $message);
+                flock($f, LOCK_UN);
+            }
+
             fclose($f);
         }
     }
@@ -261,38 +264,26 @@ class nodes
      * Remove a schema
      *
      * @param string  $schema
-     * @param boolean $ofNodes
      *
-     * @return boolean
+     * @return bool
      */
-    public function delSchema($schema, $ofNodes = true)
+    public function delSchema(string $schema): bool
     {
-        if (file_exists(DIV_NODES_ROOT.$schema)) {
-            if (!is_dir(DIV_NODES_ROOT.$schema)) {
+        if (file_exists(DIV_NODES_ROOT . $schema)) {
+            if (!is_dir(DIV_NODES_ROOT . $schema)) {
                 return false;
             }
-            $dir = scandir(DIV_NODES_ROOT.$schema);
-            //echo DIV_NODES_ROOT . $schema. " == ".count($dir)."\n";
+
+            $dir = scandir(DIV_NODES_ROOT . $schema);
+
             foreach ($dir as $entry) {
                 if ($entry != "." && $entry != "..") {
-                    if (is_dir(DIV_NODES_ROOT.$schema."/$entry")) {
-                        if ($entry == ".queue" || $entry == ".schema") {
-                            $this->delSchema($schema."/$entry", false);
-                        } else {
-                            $this->delSchema($schema."/$entry", $ofNodes);
-                        }
-
+                    if (is_dir(DIV_NODES_ROOT . $schema . "/$entry")) {
+                        $this->delSchema($schema . "/$entry");
                     } else {
-                        //echo "--- CHECK ".DIV_NODES_ROOT . $schema . "/$entry".($ofNodes?"-- OF NODES --":"")."\n";
-                        if ($ofNodes) {
-                            if (!$this->isReservedId($entry)) {
-                                $this->delNode($entry, $schema);
-                            }
-                        } else {
-                            //echo "UNLINK ".DIV_NODES_ROOT . $schema . "/$entry"."\n";
-                            @unlink(DIV_NODES_ROOT.$schema."/$entry");
+                        if (!$this->isReservedId($entry)) {
+                            $this->delNode($entry, $schema);
                         }
-
                     }
                 }
             }
@@ -308,24 +299,25 @@ class nodes
                     $sch = $rel['foreign_schema'];
                 }
 
-                // If the schema of reference is a subschema of this schema
+                // If the schema of reference is a sub-schema of this schema
                 if ($schema == substr($sch, 0, strlen($schema))) {
                     continue;
                 }
 
-                $relats = $this->getReferences($sch);
+                $relations = $this->getReferences($sch);
                 $new_references = [];
-                foreach ($relats as $re) {
-                    if ($re['schema'] != $schema && $re['foreign_schema'] != $schema) {
-                        $new_references[] = $re;
+                foreach ($relations as $relation) {
+                    if ($relation['schema'] != $schema && $relation['foreign_schema'] != $schema) {
+                        $new_references[] = $relation;
                     }
                 }
-                file_put_contents(self::clearDoubleSlashes(DIV_NODES_ROOT."/$sch/.references"), serialize($new_references));
+
+                file_put_contents(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$sch/" . DIV_NODES_REFERENCES_FOLDER), serialize($new_references));
             }
 
-            @unlink(self::clearDoubleSlashes(DIV_NODES_ROOT."/$schema/.references"));
-            @unlink(self::clearDoubleSlashes(DIV_NODES_ROOT."/$schema/.stats"));
-            @rmdir(self::clearDoubleSlashes(DIV_NODES_ROOT."/$schema"));
+            @unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/" . DIV_NODES_REFERENCES_FOLDER));
+            @unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/" . DIV_NODES_STATS_FOLDER));
+            @rmdir(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema"));
 
             return true;
         }
@@ -337,51 +329,50 @@ class nodes
      * Remove one node
      *
      * @param string $id
-     * @param string $schema
+     * @param ?string $schema
      *
      * @return boolean
      */
-    public function delNode($id, $schema = null)
+    public function delNode(string|int|float $id, ?string $schema = null): bool
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
+
         if (!$this->existsSchema($schema)) {
             return false;
         }
-        $fullNodePath = DIV_NODES_ROOT."$schema/$id";
+
+        $fullNodePath = DIV_NODES_ROOT . "$schema/$id";
+
         if (!file_exists($fullNodePath)) {
             return false;
         }
 
         $is_order = false;
 
-        if (file_exists(DIV_NODES_ROOT.$schema."/.first")
-            && file_exists(DIV_NODES_ROOT.$schema."/.last")
-            && !$this->isReservedId($id)) {
+        if (
+            file_exists(DIV_NODES_ROOT . $schema . '/' . DIV_NODES_FIRST_NODE)
+            && file_exists(DIV_NODES_ROOT . $schema . '/' . DIV_NODES_LAST_NODE)
+            && !$this->isReservedId($id)
+        ) {
             $is_order = true;
         }
 
         if ($is_order) {
-            return $this->waitAndDo(DIV_NODES_ROOT."$schema/.queue/.schema", function (nodes $db, $params) {
-                $schema = $params['schema'];
-                $fullNodePath = $params['fullNodePath'];
-                $id = $params['id'];
-
+            return $this->waitAndDo(DIV_NODES_ROOT . "$schema", function () use ($schema, $fullNodePath, $id) {
                 $raw_data = file_get_contents($fullNodePath);
                 $node = @unserialize($raw_data);
                 if ($node === false) {
                     $node = $raw_data;
                 }
 
-                $r = $db->executeTriggers(DIV_NODES_TRIGGER_BEFORE_DEL, $node, $id, $schema, null, $node);
+                $r = $this->executeTriggers(DIV_NODES_TRIGGER_BEFORE_DEL, $node, $id, $schema, null, $node);
                 if ($r === DIV_NODES_ROLLBACK_TRANSACTION) {
                     return DIV_NODES_ROLLBACK_TRANSACTION;
                 }
 
                 // TODO: here or after unlinks? Si es despues hay q tener en cuenta si es raw data
 
-                $r = $db->executeTriggers(DIV_NODES_TRIGGER_AFTER_DEL, $node, $id, $schema, $node, $node);
+                $r = $this->executeTriggers(DIV_NODES_TRIGGER_AFTER_DEL, $node, $id, $schema, $node, $node);
 
                 if ($r === DIV_NODES_ROLLBACK_TRANSACTION) {
                     return DIV_NODES_ROLLBACK_TRANSACTION;
@@ -391,50 +382,50 @@ class nodes
                 if (isset($node['previous']) && isset($node['next'])) {
                     if ($node['previous'] === false && $node['next'] === false) // is the only one
                     {
-                        $db->setOrderFirst($schema, '');
-                        $db->setOrderLast($schema, '');
+                        $this->setOrderFirst($schema, '');
+                        $this->setOrderLast($schema, '');
                     }
 
                     if ($node['previous'] === false && $node['next'] !== false) // is the first
                     {
                         // update the new first
-                        $next = $db->getNode($node['next'], $schema);
+                        $next = $this->getNode($node['next'], $schema);
                         $next['previous'] = false;
-                        $db->putNode($node['next'], $next, $schema);
-                        $db->setOrderFirst($schema, $node['next']);
+                        $this->putNode($node['next'], $next, $schema);
+                        $this->setOrderFirst($schema, $node['next']);
                     }
 
                     if ($node['next'] === false && $node['previous'] !== false) // is the last
                     {
                         // update the new last
-                        $previous = $db->getNode($node['previous'], $schema);
+                        $previous = $this->getNode($node['previous'], $schema);
                         $previous['next'] = false;
-                        $db->putNode($node['previous'], $previous, $schema);
-                        $db->setOrderLast($schema, $node['previous']);
+                        $this->putNode($node['previous'], $previous, $schema);
+                        $this->setOrderLast($schema, $node['previous']);
                     }
 
                     if ($node['next'] !== false && $node['previous'] !== false) // is in the middle
                     {
-                        $previous = $db->getNode($node['previous'], $schema);
-                        $next = $db->getNode($node['next'], $schema);
+                        $previous = $this->getNode($node['previous'], $schema);
+                        $next = $this->getNode($node['next'], $schema);
                         $previous['next'] = $node['next'];
                         $next['previous'] = $node['previous'];
-                        $db->putNode($node['next'], $next, $schema);
-                        $db->putNode($node['previous'], $previous, $schema);
+                        $this->putNode($node['next'], $next, $schema);
+                        $this->putNode($node['previous'], $previous, $schema);
                     }
                 }
 
                 // Delete the node
-                unlink(self::clearDoubleSlashes(DIV_NODES_ROOT."/$schema/$id"));
+                unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id"));
 
                 // Delete indexes
-                $idx_path = DIV_NODES_ROOT."/$schema/$id.idx";
+                $idx_path = DIV_NODES_ROOT . "/$schema/$id." . DIV_NODES_INDEX_FILE_EXTENSION;
                 if (file_exists($idx_path)) {
                     $idx = unserialize(file_get_contents($idx_path));
 
                     if (isset($idx['indexes'])) {
                         foreach ($idx['indexes'] as $word_schema => $index_id) {
-                            $db->delNode($index_id, $word_schema);
+                            $this->delNode($index_id, $word_schema);
                         }
                     }
 
@@ -442,138 +433,127 @@ class nodes
                 }
 
                 // record stats
-                if (!(pathinfo($fullNodePath, PATHINFO_EXTENSION) == "idx"
+                if (!(pathinfo($fullNodePath, PATHINFO_EXTENSION) == DIV_NODES_INDEX_FILE_EXTENSION
                     && file_exists(substr($fullNodePath, 0, strlen($fullNodePath) - 4)))) {
-                    $db->changeStats('{count} -= 1', $schema);
+                    $this->changeStats('{count} -= 1', $schema);
                 }
 
-                // DO NOT DELETE HERE THE QUEUE FOLDER !! refer to waitForNodeAndDo
-
                 return true;
-            }, [
-                "schema"       => $schema,
-                "fullNodePath" => $fullNodePath,
-                "id"           => $id,
-            ], 60, null, $schema);
+            });
         } else {
-            return $this->waitForNodeAndDo($id, function (nodes $db, $params) {
-                $schema = $params['schema'];
-                $fullNodePath = $params['fullNodePath'];
-                $id = $params['id'];
+            return $this->waitForNodeAndDo(
+                schema: $schema,
+                nodeId: $id,
+                action: function () use ($schema, $fullNodePath, $id) {
+                    $raw_data = file_get_contents($fullNodePath);
+                    $node = @unserialize($raw_data);
 
-                $raw_data = file_get_contents($fullNodePath);
-                $node = @unserialize($raw_data);
-                if ($node === false) {
-                    $node = $raw_data;
-                }
+                    if ($node === false) {
+                        $node = $raw_data;
+                    }
 
-                $r = $db->executeTriggers(DIV_NODES_TRIGGER_BEFORE_DEL, $node, $id, $schema, null, $node);
-                if ($r === DIV_NODES_ROLLBACK_TRANSACTION) {
-                    return DIV_NODES_ROLLBACK_TRANSACTION;
-                }
+                    $r = $this->executeTriggers(DIV_NODES_TRIGGER_BEFORE_DEL, $node, $id, $schema, null, $node);
+                    if ($r === DIV_NODES_ROLLBACK_TRANSACTION) {
+                        return DIV_NODES_ROLLBACK_TRANSACTION;
+                    }
 
-                $restore = [];
+                    $restore = [];
 
-                // Delete cascade
-                $references = $db->getReferences($schema);
-                foreach ($references as $rel) {
-                    if ($rel['foreign_schema'] == $schema) {
-                        if (!$db->existsSchema($rel['schema'])) {
-                            continue;
-                        }
+                    // Delete cascade
+                    $references = $this->getReferences($schema);
+                    foreach ($references as $rel) {
+                        if ($rel['foreign_schema'] == $schema) {
+                            if (!$this->existsSchema($rel['schema'])) {
+                                continue;
+                            }
 
-                        $ids = $db->getNodesID($rel['schema']);
-                        foreach ($ids as $fid) {
-                            $referencedNode = $db->getNode($fid, $rel['schema']);
-                            $restore[] = [
-                                "node"   => $referencedNode,
-                                "id"     => $fid,
-                                "schema" => $rel['schema'],
-                            ];
+                            $ids = $this->getIds($rel['schema']);
+                            foreach ($ids as $fid) {
+                                $referencedNode = $this->getNode($fid, $rel['schema']);
+                                $restore[] = [
+                                    "node"   => $referencedNode,
+                                    "id"     => $fid,
+                                    "schema" => $rel['schema'],
+                                ];
 
-                            $delete_node = false;
+                                $delete_node = false;
 
-                            if (is_array($referencedNode)) {
-                                if (isset($referencedNode[$rel['property']])) {
-                                    if ($referencedNode[$rel['property']] == $id) {
-                                        if ($rel['delete_cascade'] == true) {
-                                            $delete_node = true;
-                                        } else {
-                                            $db->setNode($fid, [
-                                                $rel['property'] => null,
-                                            ], $rel['schema']);
+                                if (is_array($referencedNode)) {
+                                    if (isset($referencedNode[$rel['property']])) {
+                                        if ($referencedNode[$rel['property']] == $id) {
+                                            if ($rel['delete_cascade'] == true) {
+                                                $delete_node = true;
+                                            } else {
+                                                $this->setNode($fid, [
+                                                    $rel['property'] => null,
+                                                ], $rel['schema']);
+                                            }
+                                        }
+                                    }
+                                } elseif (is_object($referencedNode)) {
+                                    if (isset($referencedNode->$rel['property'])) {
+                                        if ($referencedNode->$rel['property'] == $id) {
+                                            if ($rel['delete_cascade'] == true) {
+                                                $delete_node = true;
+                                            } else {
+                                                $this->setNode($fid, [
+                                                    $rel['property'] => null,
+                                                ], $rel['schema']);
+                                            }
                                         }
                                     }
                                 }
-                            } elseif (is_object($referencedNode)) {
-                                if (isset($referencedNode->$rel['property'])) {
-                                    if ($referencedNode->$rel['property'] == $id) {
-                                        if ($rel['delete_cascade'] == true) {
-                                            $delete_node = true;
-                                        } else {
-                                            $db->setNode($fid, [
-                                                $rel['property'] => null,
-                                            ], $rel['schema']);
-                                        }
+
+                                if ($delete_node) {
+                                    $r = $this->delNode($fid, $rel['schema']);
+                                    if ($r === DIV_NODES_ROLLBACK_TRANSACTION) {
+                                        return DIV_NODES_ROLLBACK_TRANSACTION;
                                     }
                                 }
                             }
+                        }
+                    }
 
-                            if ($delete_node) {
-                                $r = $db->delNode($fid, $rel['schema']);
-                                if ($r === DIV_NODES_ROLLBACK_TRANSACTION) {
-                                    return DIV_NODES_ROLLBACK_TRANSACTION;
-                                }
+                    // Delete the node
+                    unlink(self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id"));
+
+                    $r = $this->executeTriggers(DIV_NODES_TRIGGER_AFTER_DEL, $node, $id, $schema, $node, $node);
+
+                    if ($r === DIV_NODES_ROLLBACK_TRANSACTION) {
+                        foreach ($restore as $rest) {
+                            if ($this->existsNode($rest['id'], $rest['schema'])) {
+                                $this->setNode($rest['id'], $rest['node'], $rest['schema']);
+                            } else {
+                                $this->addNode($rest['node'], $rest['id'], $rest['schema']);
                             }
                         }
+
+                        return DIV_NODES_ROLLBACK_TRANSACTION;
                     }
-                }
 
-                // Delete the node
-                unlink(self::clearDoubleSlashes(DIV_NODES_ROOT."/$schema/$id"));
+                    // Delete indexes
+                    $idx_path = DIV_NODES_ROOT . "/$schema/$id." . DIV_NODES_INDEX_FILE_EXTENSION;
+                    if (file_exists($idx_path)) {
+                        $idx = unserialize(file_get_contents($idx_path));
 
-                $r = $db->executeTriggers(DIV_NODES_TRIGGER_AFTER_DEL, $node, $id, $schema, $node, $node);
-
-                if ($r === DIV_NODES_ROLLBACK_TRANSACTION) {
-                    foreach ($restore as $rest) {
-                        if ($db->existsNode($rest['id'], $rest['schema'])) {
-                            $db->setNode($rest['id'], $rest['node'], $rest['schema']);
-                        } else {
-                            $db->addNode($rest['node'], $rest['id'], $rest['schema']);
+                        if (isset($idx['indexes'])) {
+                            foreach ($idx['indexes'] as $word_schema => $index_id) {
+                                $this->delNode($index_id, $word_schema);
+                            }
                         }
+
+                        unlink(self::clearDoubleSlashes($idx_path));
                     }
 
-                    return DIV_NODES_ROLLBACK_TRANSACTION;
-                }
-
-                // Delete indexes
-                $idx_path = DIV_NODES_ROOT."/$schema/$id.idx";
-                if (file_exists($idx_path)) {
-                    $idx = unserialize(file_get_contents($idx_path));
-
-                    if (isset($idx['indexes'])) {
-                        foreach ($idx['indexes'] as $word_schema => $index_id) {
-                            $db->delNode($index_id, $word_schema);
-                        }
+                    // record stats
+                    if (!(pathinfo($fullNodePath, PATHINFO_EXTENSION) == DIV_NODES_INDEX_FILE_EXTENSION
+                        && file_exists(substr($fullNodePath, 0, strlen($fullNodePath) - 4)))) {
+                        $this->changeStats('{count} -= 1', $schema);
                     }
 
-                    unlink(self::clearDoubleSlashes($idx_path));
+                    return true;
                 }
-
-                // record stats
-                if (!(pathinfo($fullNodePath, PATHINFO_EXTENSION) == "idx"
-                    && file_exists(substr($fullNodePath, 0, strlen($fullNodePath) - 4)))) {
-                    $db->changeStats('{count} -= 1', $schema);
-                }
-
-                // DO NOT DELETE HERE THE QUEUE FOLDER !! refer to waitForNodeAndDo
-
-                return true;
-            }, [
-                "schema"       => $schema,
-                "fullNodePath" => $fullNodePath,
-                "id"           => $id,
-            ], 60, $schema);
+            );
         }
     }
 
@@ -584,17 +564,15 @@ class nodes
      *
      * @return array
      */
-    public function getReferences($schema = null)
+    public function getReferences(?string $schema = null): array
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
 
         if (!$this->existsSchema($schema)) {
             return [];
         }
 
-        $path = DIV_NODES_ROOT.$schema."/.references";
+        $path = DIV_NODES_ROOT . $schema . "/.references";
         if (!file_exists($path)) {
             file_put_contents($path, serialize([]));
         }
@@ -611,24 +589,22 @@ class nodes
      *
      * @return array
      */
-    public function getNodesID($schema = null)
+    public function getIds(?string $schema = null): array
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
 
         if (!$this->existsSchema($schema)) {
-            return false;
+            return [];
         }
 
         $list = [];
-        $dir = scandir(DIV_NODES_ROOT.$schema);
+        $dir = scandir(DIV_NODES_ROOT . $schema);
 
         foreach ($dir as $entry) {
-            $full_path = DIV_NODES_ROOT.$schema."/$entry";
+            $full_path = DIV_NODES_ROOT . $schema . "/$entry";
             if (!is_dir($full_path)) {
                 if (!$this->isReservedId($entry)) {
-                    if (pathinfo($full_path, PATHINFO_EXTENSION) == "idx" && file_exists(substr($full_path, 0, strlen($full_path) - 4))) {
+                    if (pathinfo($full_path, PATHINFO_EXTENSION) == DIV_NODES_INDEX_FILE_EXTENSION && file_exists(substr($full_path, 0, strlen($full_path) - 4))) {
                         continue;
                     }
                     $list[] = $entry;
@@ -649,43 +625,34 @@ class nodes
      *
      * @return mixed
      */
-    public function getNode($id, $schema = null, $default = null, $keepLocked = false)
+    public function getNode(string|int|float $id, string $schema = null, mixed $default = null): mixed
     {
-
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
 
         // read pure data
-        $node_path = self::clearDoubleSlashes(DIV_NODES_ROOT."/$schema/$id");
+        $nodePath = self::clearDoubleSlashes(DIV_NODES_ROOT . "/$schema/$id");
 
-        return $this->waitForNodeAndDo($id, function ($db, $params) {
-            //echo "GET NODE: ".$params['node_path']."\n";
+        return $this->waitForNodeAndDo(
+            schema: $schema,
+            nodeId: $id,
+            action: function () use ($nodePath, $default) {
+                // ... and load
+                if ($default === null) {
+                    $data = file_get_contents($nodePath);
+                } else {
+                    // hide errors if not exists
+                    $data = @file_get_contents($nodePath);
+                }
 
-            // ... and load
-            if (is_null($params['default'])) {
-                $data = file_get_contents($params['node_path']);
-            } else {
-                // hide errors if not exists
-                $data = @file_get_contents($params['node_path']);
+                if ($data === false) // the node not exists ...
+                {
+                    return $default;
+                }
+
+                $node = unserialize($data);
+                return $node;
             }
-
-            if ($data === false) // the node not exists ...
-            {
-                return $params['default'];
-            }
-
-            $node = unserialize($data);
-
-            return $node;
-
-        }, [
-            "node_path"  => $node_path,
-            "default"    => $default,
-            "schema"     => $schema,
-            "keepLocked" => $keepLocked,
-        ], 60, $schema);
-
+        );
     }
 
     /**
@@ -699,11 +666,9 @@ class nodes
      *
      * @return mixed
      */
-    public function setNode($id, $data, $schema = null, $cop = true, $params = [])
+    public function setNode(string|int|float $id, mixed $data, ?string $schema = null, bool $cop = true, array $params = []): mixed
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
 
         if (!$this->existsSchema($schema)) {
             return false;
@@ -716,62 +681,49 @@ class nodes
             $data = null;
         }
 
-        return $this->waitForNodeAndDo($id, function (nodes $db, $params) {
+        return $this->waitForNodeAndDo(
+            schema: $schema,
+            nodeId: $id,
+            action: function () use ($id, $data, $schema, $setter, $cop, $params) {
 
-            $id = $params['id'];
-            $data = $params['data'];
-            $schema = $params['schema'];
-            $setter = $params['setter'];
-            $cop = $params['cop'];
+                if ($this->existsNode($id, $schema)) {
 
-            //echo "SET NODE ".DIV_NODES_ROOT . "$schema/$id\n";
-
-            if ($db->existsNode($id, $schema)) {
-
-                $raw_data = file_get_contents(DIV_NODES_ROOT."$schema/$id");
-                $node = unserialize($raw_data);
-                if ($node == false) {
-                    $node = $raw_data;
+                    $raw_data = file_get_contents(DIV_NODES_ROOT . "$schema/$id");
+                    $node = unserialize($raw_data);
+                    if ($node == false) {
+                        $node = $raw_data;
+                    }
+                } else {
+                    $node = $data;
                 }
-            } // $db->getNode($id, $schema);
-            else {
-                $node = $data;
+
+                $r = $this->executeTriggers(DIV_NODES_TRIGGER_BEFORE_SET, $node, $id, $schema, null, $data);
+                if ($r === DIV_NODES_ROLLBACK_TRANSACTION) {
+                    return DIV_NODES_ROLLBACK_TRANSACTION;
+                }
+
+                $old = $node;
+                if ($setter !== null) {
+                    $data = $setter($node, $this, $params);
+                }
+
+                if ($cop) {
+                    $node = $this->cop($node, $data);
+                } else {
+                    $node = $data;
+                }
+
+                file_put_contents(DIV_NODES_ROOT . "$schema/$id", serialize($node));
+
+                $r = $this->executeTriggers(DIV_NODES_TRIGGER_AFTER_SET, $node, $id, $schema, $old, $data);
+
+                if ($r === DIV_NODES_ROLLBACK_TRANSACTION) {
+                    file_put_contents(DIV_NODES_ROOT . "$schema/$id", serialize($old));
+                }
+
+                return $node;
             }
-
-            $r = $db->executeTriggers(DIV_NODES_TRIGGER_BEFORE_SET, $id, $node, $schema, null, $data);
-            if ($r === DIV_NODES_ROLLBACK_TRANSACTION) {
-                return DIV_NODES_ROLLBACK_TRANSACTION;
-            }
-
-            $old = $node;
-            if (!is_null($setter)) {
-                $data = $setter($node, $this, $params['params']);
-            }
-
-            if ($cop) {
-                $node = $db->cop($node, $data);
-            } // update the node
-            else {
-                $node = $data;
-            } // replace node
-
-            file_put_contents(DIV_NODES_ROOT."$schema/$id", serialize($node));
-
-            $r = $db->executeTriggers(DIV_NODES_TRIGGER_AFTER_SET, $id, $node, $schema, $old, $data);
-
-            if ($r === DIV_NODES_ROLLBACK_TRANSACTION) {
-                file_put_contents(DIV_NODES_ROOT."$schema/$id", serialize($old));
-            }
-
-            return $node;
-        }, [
-            "id"     => $id,
-            "schema" => $schema,
-            "data"   => $data,
-            "setter" => $setter,
-            "cop"    => $cop,
-            "params" => $params,
-        ], 60, $schema);
+        );
     }
 
     /**
@@ -784,33 +736,80 @@ class nodes
      *
      * @return mixed
      */
-    public function putNode($id, $data, $schema = null, $params = [])
+    public function putNode(string|int|float $id, mixed $data, ?string $schema = null, $params = [])
     {
         return $this->setNode($id, $data, $schema, false, $params);
     }
 
     /**
-     * Complete object/array properties
+     * Get default value for type
+     * 
+     * @param \ReflectionNamedType $type
+     * 
+     * @return mixed
+     */
+    private static function getDefaultValueForType(\ReflectionNamedType $type): mixed
+    {
+        $typeName = $type->getName();
+
+        if ($type->allowsNull()) {
+            return null;
+        } elseif ($typeName === 'int' || $typeName === 'float') {
+            return 0;
+        } elseif ($typeName === 'bool') {
+            return false;
+        } elseif ($typeName === 'string') {
+            return '';
+        } elseif ($typeName === 'array') {
+            return [];
+        } else {
+            return new $typeName();
+        }
+    }
+
+    /**
+     * Resolve array type from doc
+     * 
+     * @param string $arrayType
+     * 
+     * @return string
+     */
+    public static function resolveArrayType(string $arrayType): string
+    {
+        if (preg_match('/@var\s+(?:array<([^>\s]+)>\s*|\s*([^>\s]+)\[\]\s*)/', $arrayType, $matches)) {
+            return $matches[1] ?: $matches[2];
+        }
+
+        return $arrayType;
+    }
+
+    /**
+     * Compose object/array properties
      *
      * @param mixed   $source
      * @param mixed   $complement
      * @param integer $level
+     * @param boolean $strict
      *
+     * @param \ReflectionProperty   $propertyType
      * @return mixed
      */
-    final static function cop(&$source, $complement, $level = 0)
+    final public static function cop(mixed &$source, mixed $complement, int $level = 0, bool $strict = false, \ReflectionProperty $propertyType = null): mixed
     {
         $null = null;
 
-        if (is_null($source)) {
+        if ($source === null) {
             return $complement;
         }
-        if (is_null($complement)) {
+
+        if ($complement === null) {
             return $source;
         }
+
         if (is_scalar($source) && is_scalar($complement)) {
             return $complement;
         }
+
         if (is_scalar($complement) || is_scalar($source)) {
             return $source;
         }
@@ -822,17 +821,50 @@ class nodes
 
             foreach ($complement as $key => $value) {
                 if (is_object($source)) {
-                    if (isset($source->$key)) {
-                        $source->$key = self::cop($source->$key, $value, $level + 1);
+                    if (property_exists($source, $key)) {
+                        $property = new \ReflectionProperty($source, $key);
+                        $property->setAccessible(true);
+
+                        if (!$property->isInitialized($source)) {
+                            $defaultValue = self::getDefaultValueForType($property->getType());
+                            $property->setValue($source, $defaultValue);
+                        }
+
+                        $propertyValue = $property->getValue($source);
+
+                        if (is_object($propertyValue) && is_object($value)) {
+                            self::cop($propertyValue, $value, $level + 1, $strict, $property);
+                        } else {
+                            $propertyType = $property->getType();
+                            $property->setValue($source, self::cop($propertyValue, $value, $level + 1, $strict, $property));
+                        }
                     } else {
-                        $source->$key = self::cop($null, $value, $level + 1);
+                        if (!$strict) {
+                            $source->$key = self::cop($null, $value, $level + 1, $strict);
+                        }
                     }
                 }
+
                 if (is_array($source)) {
-                    if (isset($source[$key])) {
-                        $source[$key] = self::cop($source[$key], $value, $level + 1);
-                    } else {
-                        $source[$key] = self::cop($null, $value, $level + 1);
+                    $updated = false;
+                    if ($propertyType !== null) {
+                        $docComment = $propertyType->getDocComment();
+                        $arrayElementType = self::resolveArrayType($docComment);
+                        if (class_exists($arrayElementType)) {
+                            $source[$key] = new $arrayElementType();
+                            self::cop($source[$key], $value, $level + 1, $strict, $propertyType);
+                            $updated = true;
+                        }
+                    }
+
+                    if (!$updated) {
+                        if (array_key_exists($key, $source)) {
+                            $source[$key] = self::cop($source[$key], $value, $level + 1, $strict);
+                        } else {
+                            if (!$strict) {
+                                $source[$key] = self::cop($null, $value, $level + 1, $strict);
+                            }
+                        }
                     }
                 }
             }
@@ -849,21 +881,16 @@ class nodes
      *
      * @return boolean
      */
-    public function existsNode($id, $schema = null)
+    public function existsNode(string|int|float $id, ?string $schema = null)
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
 
-        $fullPath = DIV_NODES_ROOT.$schema."/$id";
-
-        self::log("->existsNode($id, $schema): $fullPath");
+        $fullPath = DIV_NODES_ROOT . $schema . "/$id";
 
         if (file_exists($fullPath)) {
             if (!is_dir($fullPath)) {
                 return true;
             }
-            self::log("---> $fullPath is a folder");
         }
 
         return false;
@@ -872,24 +899,19 @@ class nodes
     /**
      * Insert a node in schema
      *
-     * @param mixed  $node
-     * @param string $id
+     * @param mixed $node
+     * @param string|int|float $id
      * @param string $schema
      *
-     * @return mixed
+     * @return string|int|float|bool
      */
-    public function addNode($node, $id = null, $schema = null)
+    public function addNode(mixed $node, string|int|float|null $id = null, ?string $schema = null): string|int|float|bool
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
-        if (is_null($id)) {
-            $id = date("Ymdhis").uniqid();
-        }
+        $schema ??= $this->schema;
+        $id ??= self::generateUUIDv4();
 
-        if ($this->isReservedId($id)) {
+        if ($this->isReservedId($id) || !$this->isValidId($id)) {
             self::log("Invalid ID '$id' for node");
-
             return false;
         }
 
@@ -906,11 +928,11 @@ class nodes
 
         // save node
         $data = serialize($node);
-        file_put_contents(DIV_NODES_ROOT.$schema."/$id", $data);
+        file_put_contents(DIV_NODES_ROOT . $schema . "/$id", $data);
 
         // record the stats
-        $full_path = DIV_NODES_ROOT.$schema."/$id";
-        if (!(pathinfo($full_path, PATHINFO_EXTENSION) == "idx" && file_exists(substr($full_path, 0, strlen($full_path) - 4)))) {
+        $full_path = DIV_NODES_ROOT . $schema . "/$id";
+        if (!(pathinfo($full_path, PATHINFO_EXTENSION) == DIV_NODES_INDEX_FILE_EXTENSION && file_exists(substr($full_path, 0, strlen($full_path) - 4)))) {
             $this->changeStats('{count} += 1', $schema);
         }
 
@@ -923,7 +945,36 @@ class nodes
             return DIV_NODES_ROLLBACK_TRANSACTION;
         }
 
+        $this->applyIndexers($id, $node, $schema);
+
         return $id;
+    }
+
+    public function applyIndexers(string|int|float $nodeId = null, mixed $node = null, ?string $schema = null): void
+    {
+        if ($nodeId === null && $node !== null) {
+            return;
+        }
+
+        $schema ??= $this->schema;
+
+        foreach ($this->__indexers as $name => $indexer) {
+            self::log("Applying indexer $name to node $schema/$nodeId");
+
+            $indexer->schema ??= $this->schema;
+            
+            if ($indexer->schema != $schema) {
+                continue;
+            }
+
+            self::indexNode(
+                nodeId: $nodeId,
+                node: $node,
+                contentExtractor: $indexer->contentExtractor,
+                schema: $schema,
+                wholeWords: $indexer->wholeWords ?? false
+            );
+        }
     }
 
     /**
@@ -932,7 +983,7 @@ class nodes
      * @param $event
      * @param $callable
      */
-    public function addTrigger($event, $callable)
+    public function addTrigger(string $event, Closure $callable): void
     {
         if (!isset($this->__triggers[$event])) {
             $this->__triggers[$event] = [];
@@ -953,18 +1004,22 @@ class nodes
      *
      * @return mixed
      */
-    public function executeTriggers($event, $node, $id, $schema = null, $old = null, $data = null)
+    public function executeTriggers(string $event, mixed $node, string|int|float $id, ?string $schema = null, mixed $old = null, mixed $data = null): mixed
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
 
         if (!isset($this->__triggers[$event])) {
             $this->__triggers[$event] = [];
         }
 
         foreach ($this->__triggers[$event] as $f) {
-            $result = $f($node, $id, $schema, $old, $data);
+
+            /** @var Closure $f */
+            if ($f instanceof Closure) {
+                $result = $f($node, $id, $schema, $old, $data);
+            } else {
+                return DIV_NODES_ROLLBACK_TRANSACTION;
+            }
 
             if ($result == DIV_NODES_ROLLBACK_TRANSACTION) {
                 return DIV_NODES_ROLLBACK_TRANSACTION;
@@ -988,7 +1043,7 @@ class nodes
      *
      * @return array
      */
-    public function getRecursiveNodes($schema = "/", $paramsBySchema = [], $paramsDefault = [], $offset = 0, $limit = -1, $onlyIds = false)
+    public function getRecursiveNodes(string $schema = "/", array $paramsBySchema = [], array $paramsDefault = [], int $offset = 0, int $limit = -1, bool $onlyIds = false): array
     {
         $schemas = [$schema => $schema];
         $schemas = array_merge($schemas, $this->getSchemas($schema));
@@ -1020,7 +1075,7 @@ class nodes
                             $list[$schema] = [];
                         }
                         if (!$onlyIds) {
-                            $list[$schema][$id] = $this->getNode($id, $schema);
+                            $list[$schema][$id] = $this->getNode($id, $this->schema);
                         } else {
                             $list[$schema][$id] = $id;
                         }
@@ -1042,7 +1097,7 @@ class nodes
      *
      * @return array
      */
-    public function getSchemas($from)
+    public function getSchemas(string $from): array
     {
         $schemas = [];
 
@@ -1055,14 +1110,12 @@ class nodes
             {
                 $from = array_shift($stack);
 
-                $dir = scandir(DIV_NODES_ROOT.$from);
+                $dir = scandir(DIV_NODES_ROOT . $from);
 
                 foreach ($dir as $entry) {
                     $fullSchema = str_replace("//", "/", "$from/$entry");
 
-                    if ($entry != '.' && $entry != '..' && !is_file(DIV_NODES_ROOT.$fullSchema)
-                        && $entry != ".queue"
-                        && $entry != ".schema") {
+                    if ($entry != '.' && $entry != '..' && !is_file(DIV_NODES_ROOT . $fullSchema)) {
                         $stack[$fullSchema] = $fullSchema;
                         $schemas[$fullSchema] = $fullSchema;
                     }
@@ -1081,11 +1134,10 @@ class nodes
      *
      * @return mixed
      */
-    public function getNodes($params = [], $schema = null, $onlyIds = false)
+    public function getNodes(array $params = [], ?string $schema = null, bool $onlyIds = false)
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
+
         if (!$this->existsSchema($schema)) {
             return false;
         }
@@ -1106,20 +1158,22 @@ class nodes
             'list'   => [],
         ];
 
-
         // CASE 1: where, not order, limit
-
         if (isset($params['where'])) {
-            $this->forEachNode(function ($node, $file, $schema, $db, &$otherData, $iterator) {
+            $this->forEachNode(function ($node, $file, $iterator) use (&$data) {
 
                 // if no order...
-                if (!isset($otherData['params']['order'])
-                    || (isset($otherData['params']['order'])
-                        && ($otherData['params']['order'] === false || !is_null($otherData['params']['order'])))) // ..check for offset and limit
+                if (
+                    !isset($data['params']['order'])
+                    || (isset($data['params']['order'])
+                        && ($data['params']['order'] === false || $data['params']['order'] !== null))
+                ) // ..check for offset and limit
                 {
-                    if ($iterator < $otherData['params']['offset']
-                        || ($otherData['params']['limit'] <= 0
-                            && !is_null($otherData['params']['limit']))) {
+                    if (
+                        $iterator < $data['params']['offset']
+                        || ($data['params']['limit'] <= 0
+                            && $data['params']['limit'] !== null)
+                    ) {
                         return DIV_NODES_FOR_CONTINUE_DISCARDING;
                     }
                 }
@@ -1133,47 +1187,44 @@ class nodes
                     $vars = ['value' => $node];
                 }
 
-                $w = $otherData['params']['where'];
+                $w = $data['params']['where'];
 
                 foreach ($vars as $key => $value) {
-                    $w = str_replace('{'.$key.'}', '$vars["'.$key.'"]', $w);
+                    $w = str_replace('{' . $key . '}', '$vars["' . $key . '"]', $w);
                 }
 
                 $w = str_replace('{id}', '$id', $w);
 
                 $r = false;
-                $st = '$r = '.$w.';';
+                $st = '$r = ' . $w . ';';
                 eval($st);
 
                 if ($r === true) {
-                    $otherData['ids'][] = $file;
-                    $otherData['list'][$file] = $node;
+                    $data['ids'][] = $file;
+                    $data['list'][$file] = $node;
                 }
 
-                $otherData['params']['limit']--;
-
-            }, null, $data);
+                $data['params']['limit']--;
+            }, $schema);
         } // CASE 2: not where, not order, limit
-        elseif (!isset($params['order']) || (isset($params['order']) && ($params['order'] === false || is_null($params['order'])))) {
-            $this->forEachNode(function ($node, $file, $schema, $db, &$otherData, $iterator) {
-
+        elseif (!isset($params['order']) || (isset($params['order']) && ($params['order'] === false || $params['order'] === null))) {
+            $this->forEachNode(function ($node, $file, $iterator) use (&$data) {
                 // get nodes without order
-                if ($iterator >= $otherData['params']['offset'] && ($otherData['params']['limit'] > 0 || is_null($otherData['params']['limit']))) {
-                    $otherData['ids'][] = $file;
-                    $otherData['list'][$file] = $node;
+                if ($iterator >= $data['params']['offset'] && ($data['params']['limit'] > 0 || $data['params']['limit'] === null)) {
+                    $data['ids'][] = $file;
+                    $data['list'][$file] = $node;
                 }
 
-                if (!is_null($otherData['params']['limit'])) {
-                    $otherData['params']['limit']--;
+                if ($data['params']['limit'] !== null) {
+                    $data['params']['limit']--;
                 }
-
-            }, null, $data);
+            }, $schema);
         } // CASE 3: not where, order + limit (get all for sort after)
         else {
-            $this->forEachNode(function ($node, $file, $schema, $db, &$otherData, $iterator) {
-                $otherData['ids'][] = $file;
-                $otherData['list'][$file] = $node;
-            }, null, $data);
+            $this->forEachNode(function ($node, $file, $iterator) use (&$data) {
+                $data['ids'][] = $file;
+                $data['list'][$file] = $node;
+            }, $schema);
         }
 
         $newIds = $data['ids'];
@@ -1182,7 +1233,7 @@ class nodes
         if (isset($params['order'])) {
             $order = $params['order'];
 
-            if ($order !== false && !is_null($order)) {
+            if ($order !== false && $order !== null) {
                 $sorted = [];
                 foreach ($newIds as $id) {
                     $node = $data['list'][$id];
@@ -1209,7 +1260,7 @@ class nodes
             $c = 0;
             foreach ($newIds as $id) {
                 if ($i >= $params['offset']) {
-                    if ($c < $params['limit'] || is_null($params['limit'])) {
+                    if ($c < $params['limit'] || $params['limit'] === null) {
                         $list[] = $id;
                         $c++;
                     }
@@ -1239,13 +1290,11 @@ class nodes
      * @param array  $params
      * @param string $schema
      *
-     * @return integer
+     * @return int|bool
      */
-    public function getCount($params = [], $schema = null)
+    public function getCount(array $params = [], ?string $schema = null): int|bool
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
 
         if (!$this->existsSchema($schema)) {
             return false;
@@ -1254,10 +1303,10 @@ class nodes
         $dp = [
             "where" => "true",
         ];
+
         $params = self::cop($dp, $params);
 
-        $ids = $this->getNodesID($schema);
-        $list = [];
+        $ids = $this->getIds($schema);
 
         $c = 0;
         foreach ($ids as $id) {
@@ -1275,12 +1324,12 @@ class nodes
 
             $w = $params['where'];
             foreach ($vars as $key => $value) {
-                $w = str_replace('{'.$key.'}', '$vars["'.$key.'"]', $w);
+                $w = str_replace('{' . $key . '}', '$vars["' . $key . '"]', $w);
             }
             $w = str_replace('{id}', $id, $w);
 
             $r = false;
-            eval('$r = '.$w.';');
+            eval('$r = ' . $w . ';');
             if ($r === true) {
                 $c++;
             }
@@ -1297,11 +1346,9 @@ class nodes
      *
      * @return boolean
      */
-    public function delNodes($params = [], $schema = null)
+    public function delNodes(array $params = [], ?string $schema = null): bool
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
 
         if (!$this->existsSchema($schema)) {
             return false;
@@ -1320,7 +1367,7 @@ class nodes
                 $this->delNode($id, $schema);
             }
         } else {
-            $nodes = $this->getNodesID($schema);
+            $nodes = $this->getIds($schema);
             foreach ($nodes as $id) {
                 $this->delNode($id, $schema);
             }
@@ -1338,7 +1385,7 @@ class nodes
      *
      * @return boolean
      */
-    public function setNodeID($oldId, $newId, $schema = null)
+    public function setNodeID(string|int|float $oldId, string|int|float $newId, ?string $schema = null): bool
     {
         return $this->renameNode($oldId, $newId, $schema);
     }
@@ -1350,7 +1397,7 @@ class nodes
      *
      * @return boolean
      */
-    public function addReference($params = [])
+    public function addReference(array $params = []): bool
     {
         $dp = [
             "schema"         => $this->schema,
@@ -1376,7 +1423,7 @@ class nodes
         }
 
         $references = $this->getReferences($schema);
-        $freferences = $this->getReferences($foreign_schema);
+        $foreignReferences = $this->getReferences($foreign_schema);
 
         foreach ($references as $rel) {
             if (serialize($rel) == serialize($params)) {
@@ -1385,10 +1432,10 @@ class nodes
         }
 
         $references[] = $params;
-        $freferences[] = $params;
+        $foreignReferences[] = $params;
 
-        file_put_contents(DIV_NODES_ROOT.$schema."/.references", serialize($references));
-        file_put_contents(DIV_NODES_ROOT.$foreign_schema."/.references", serialize($freferences));
+        file_put_contents(DIV_NODES_ROOT . $schema . '/' . DIV_NODES_REFERENCES_FOLDER, serialize($references));
+        file_put_contents(DIV_NODES_ROOT . $foreign_schema . '/' . DIV_NODES_REFERENCES_FOLDER, serialize($foreignReferences));
 
         return true;
     }
@@ -1400,7 +1447,7 @@ class nodes
      *
      * @return boolean
      */
-    public function delReference($params = [])
+    public function delReference(array $params = []): bool
     {
         $dp = [
             "schema"         => $this->schema,
@@ -1427,7 +1474,7 @@ class nodes
             $new_references[] = $rel;
         }
 
-        file_put_contents(DIV_NODES_ROOT.$schema."/.references", serialize($new_references));
+        file_put_contents(DIV_NODES_ROOT . $schema . "/.references", serialize($new_references));
 
         $references = $this->getReferences($foreign_schema);
         $new_references = [];
@@ -1439,7 +1486,7 @@ class nodes
             $new_references[] = $rel;
         }
 
-        file_put_contents(DIV_NODES_ROOT.$foreign_schema."/.references", serialize($new_references));
+        file_put_contents(DIV_NODES_ROOT . $foreign_schema . "/.references", serialize($new_references));
 
         return true;
     }
@@ -1451,18 +1498,20 @@ class nodes
      * @param string $schema
      * @param array  $otherData
      */
-    public function forEachNode($closure, $schema = null, &$otherData = [])
+    public function forEachNode(Closure $closure, ?string $schema = null): void
     {
         $iterator = 0;
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
 
-        if ($dir = opendir(DIV_NODES_ROOT.$schema)) {
+        if ($dir = opendir(DIV_NODES_ROOT . $schema)) {
             while (($file = readdir($dir)) !== false) {
-                $full_path = DIV_NODES_ROOT.$schema."/".$file;
+                $full_path = DIV_NODES_ROOT . $schema . "/" . $file;
 
-                if (pathinfo($full_path, PATHINFO_EXTENSION) == "idx" && file_exists(substr($full_path, 0, strlen($full_path) - 4))) {
+                if (pathinfo($full_path, PATHINFO_EXTENSION) == DIV_NODES_INDEX_FILE_EXTENSION) {
+                    continue;
+                }
+
+                if (pathinfo($full_path, PATHINFO_EXTENSION) == DIV_NODES_LOCK_FILE_EXTENSION) {
                     continue;
                 }
 
@@ -1470,7 +1519,7 @@ class nodes
                     $node = $this->getNode($file, $schema);
                     $md5 = md5(serialize($node));
 
-                    $result = $closure($node, $file, $schema, $this, $otherData, $iterator);
+                    $result = $closure($node, $file, $iterator);
 
                     if ($result == DIV_NODES_FOR_BREAK) {
                         break;
@@ -1542,17 +1591,13 @@ class nodes
      * @param array   $words
      * @param string  $nodeId
      * @param string  $schema
-     * @param null    $indexSchema
+     * @param ?string    $indexSchema
      * @param boolean $wholeWords
      */
     public function addIndex($words, $nodeId, $schema = null, $indexSchema = null, $wholeWords = false)
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
-        if (is_null($indexSchema)) {
-            $indexSchema = $schema.'/.index';
-        }
+        $schema ??= $this->schema;
+        $indexSchema ??= $schema . '/' . DIV_NODES_INDEX_FOLDER;
 
         $this->addSchema($indexSchema);
 
@@ -1566,7 +1611,7 @@ class nodes
             } else {
                 $wordSchema = '';
                 for ($i = 0; $i < $l; $i++) {
-                    $wordSchema .= $word[$i].'/';
+                    $wordSchema .= $word[$i] . '/';
                 }
             }
 
@@ -1591,87 +1636,118 @@ class nodes
         }
     }
 
+    private function defaultContentExtractor()
+    {
+        return function ($node, $nodeId) {
+            $content = '';
+
+            if (is_object($node)) {
+                if (method_exists($node, '__toContent')) {
+                    $content = $node->__toContent();
+                } elseif (method_exists($node, '__toString')) {
+                    $content = "$node";
+                }
+            } elseif (is_scalar($node)) {
+                $content = "$node";
+            }
+
+            return $content;
+        };
+    }
     /**
      * Create index of schema
      *
-     * @param closure $contentExtractor
+     * @param Closure $contentExtractor
      * @param string  $schema
      * @param string  $indexSchema
      * @param boolean $wholeWords
+     * @param boolean $clearFirst
+     * 
+     * @return void
      */
-    public function createIndex($contentExtractor = null, $schema = null, $indexSchema = null, $wholeWords = false)
+    public function createIndex(Closure $contentExtractor = null, ?string $schema = null, ?string $indexSchema = null, bool $wholeWords = false, bool $clearFirst = false)
     {
-        if (is_null($contentExtractor)) {
-            $contentExtractor = function ($node, $nodeId) {
-                $content = '';
-
-                if (is_object($node)) {
-                    if (method_exists($node, '__toContent')) {
-                        $content = $node->__toContent();
-                    } elseif (method_exists($node, '__toString')) {
-                        $content = "$node";
-                    }
-                } elseif (is_scalar($node)) {
-                    $content = "$node";
-                }
-
-                return $content;
-            };
+        if ($clearFirst) {
+            $schema ??= $this->schema;
+            $indexSchema ??= $schema . '/' . DIV_NODES_INDEX_FOLDER;
+            $this->delSchema($indexSchema);
         }
 
-        $otherData = [
-            'indexSchema'      => $indexSchema,
-            'contentExtractor' => $contentExtractor,
-            'wholeWords'       => $wholeWords,
-        ];
+        $this->forEachNode(function ($node, $nodeId, $iterator) use ($schema, $contentExtractor, $wholeWords, $indexSchema) {
+            $this->indexNode($nodeId, $node, $contentExtractor, $schema, $indexSchema, $wholeWords);
+        }, $schema);
+    }
 
-        // indexing each node
-        $this->forEachNode(function ($node, $nodeId, $schema, nodes $db, $otherData) {
+    private function indexNode(string|int|float|null $nodeId = null, mixed $node = null, Closure $contentExtractor = null, ?string $schema = null, ?string $indexSchema = null, bool $wholeWords = false): bool
+    {
+        if ($node === null && $nodeId === null) {
+            return false;
+        }
 
-            $contentExtractor = $otherData['contentExtractor'];
-            $indexSchema = $otherData['indexSchema'];
-            $words = [];
-            $extract_words = true;
+        $contentExtractor ??= $this->defaultContentExtractor();
+        $schema ??= $this->schema;
+        $indexSchema ??= $schema . '/' . DIV_NODES_INDEX_FOLDER;
+        $node ??= $this->getNode($nodeId, $schema);
+        $words = [];
+        $extract_words = true;
 
-            // extract words from built-in node method
-            if (is_object($node)) {
-                if (method_exists($node, '__toWords')) {
-                    $extract_words = false;
-                    $words = $node->__toWords();
-                }
+        // extract words from built-in node method
+        if (is_object($node)) {
+            if (method_exists($node, '__toWords')) {
+                $extract_words = false;
+                $words = $node->__toWords();
             }
+        }
 
+        // extract words
+        if ($extract_words && count($words) == 0) {
             // get content
             $content = $contentExtractor($node, $nodeId);
+            $words = $this->getWords($content);
+        }
 
-            // extract words
-            if ($extract_words && count($words) == 0) {
-                $words = $db->getWords($content);
-            }
+        $words = $this->getWords($content);
 
-            $db->addIndex($words, $nodeId, $schema, $indexSchema, $otherData['wholeWords']);
+        $this->addIndex($words, $nodeId, $schema, $indexSchema, $wholeWords);
 
-        }, $schema, $otherData);
+        return true;
+    }
+
+    /**
+     * Define an index
+     * 
+     * @param string  $name
+     * @param Closure $contentExtractor
+     * @param string  $schema
+     * @param string  $indexSchema
+     * @param boolean $wholeWords
+     * 
+     * @return void
+     */
+    public function addIndexer(string $name, Closure $contentExtractor = null, ?string $schema = null, ?string $indexSchema = null, bool $wholeWords = false)
+    {
+        $this->__indexers[$name] = (object) [
+            'contentExtractor' => $contentExtractor,
+            'schema'           => $schema,
+            'indexSchema'      => $indexSchema,
+            'wholeWords'       => $wholeWords
+        ];
     }
 
     /**
      * Full text search
      *
      * @param string $phrase
-     * @param string $indexSchema
+     * @param ?string $indexSchema
      * @param int    $offset
      * @param int    $limit
      *
      * @return array
      */
-    public function search($phrase, $indexSchema = null, $offset = 0, $limit = -1)
+    public function search(string $phrase, ?string $indexSchema = null, int $offset = 0, int $limit = -1): array
     {
-        if (is_null($indexSchema)) {
-            $indexSchema = $this->schema.'/.index';
-        }
-
+        $indexSchema ??= $this->schema . '/' . DIV_NODES_INDEX_FOLDER;
         $results = [];
-
         $words = $this->getWords($phrase);
         $words[$phrase] = $phrase;
 
@@ -1683,7 +1759,7 @@ class nodes
                 $schema = '';
                 if ($wholeWords == 0) {
                     for ($i = 0; $i < $l; $i++) {
-                        $schema .= $word[$i]."/";
+                        $schema .= $word[$i] . "/";
                     }
                 } else {
                     $schema = $word;
@@ -1697,8 +1773,8 @@ class nodes
 
                     // calculate score
                     foreach ($schemas as $sch => $nodes) {
-                        foreach ($nodes as $node) {
-                            $id = md5($node['path']);
+                        foreach ($nodes as $id => $node) {
+                            //$id = md5($node['path']);
 
                             if (!isset($results[$id])) {
                                 $node['score'] = 0;
@@ -1729,7 +1805,7 @@ class nodes
      *
      * @return array
      */
-    private function defaultStats()
+    private function defaultStats(): array
     {
         return ['count' => 0];
     }
@@ -1737,23 +1813,23 @@ class nodes
     /**
      * Return the stats of schema
      *
-     * @param null $schema
+     * @param ?string $schema
      *
      * @return array|mixed
      */
-    public function getStats($schema = null)
+    public function getStats(?string $schema = null): array|null
     {
         $stats = null;
+
         if (!$this->existsSchema($schema)) {
             return null;
         }
-        if ($this->existsNode(".stats", $schema)) {
-            $stats = $this->getNode(".stats", $schema, null);
+
+        if ($this->existsNode(DIV_NODES_STATS_FOLDER, $schema)) {
+            $stats = $this->getNode(DIV_NODES_STATS_FOLDER, $schema, null);
         }
 
-        if (is_null($stats)) {
-            $stats = $this->reStats($schema);
-        }
+        $stats ??= $this->reStats($schema);
 
         return $stats;
     }
@@ -1766,17 +1842,15 @@ class nodes
      *
      * @return array|mixed
      */
-    public function changeStats($change, $schema = null)
+    public function changeStats($change, ?string $schema = null)
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
 
-        return $this->setNode(".stats", function ($stats, nodes $db, $params = []) {
+        return $this->setNode(DIV_NODES_STATS_FOLDER, function ($stats, nodes $db, $params = []) {
 
             $change = $params['change'];
 
-            if ($stats === false || is_null($stats) || empty($stats)) {
+            if (empty($stats)) {
                 $stats = $db->defaultStats();
             }
 
@@ -1784,9 +1858,9 @@ class nodes
                 // change stats
                 $expression = $change;
                 foreach ($stats as $key => $value) {
-                    $expression = str_replace('{'.$key.'}', '$stats["'.$key.'"]', $expression);
+                    $expression = str_replace('{' . $key . '}', '$stats["' . $key . '"]', $expression);
                 }
-                @eval($expression.";");
+                @eval($expression . ";");
             } elseif (is_callable($change)) {
                 $change($stats);
             }
@@ -1800,30 +1874,27 @@ class nodes
     /**
      * Re-write stats of schema
      *
-     * @param null $schema
+     * @param ?string $schema
      *
      * @return array
      */
-    public function reStats($schema = null)
+    public function reStats(?string $schema = null): array
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
 
         $stats = $this->defaultStats();
 
         // 'count' stat
-        $this->forEachNode(function ($node, $file, $schema, $db, &$stats = []) {
+        $this->forEachNode(function ($node, $file, $iterator) use (&$stats) {
             $stats['count']++;
-
             return DIV_NODES_FOR_CONTINUE_DISCARDING;
-        }, $schema, $stats);
+        }, $schema);
 
         // save stat
-        $this->delNode('.stats', $schema);
+        $this->delNode(DIV_NODES_STATS_FOLDER, $schema);
 
         // no use addNode!
-        file_put_contents(DIV_NODES_ROOT.$schema."/.stats", serialize($stats));
+        file_put_contents(DIV_NODES_ROOT . $schema . '/' . DIV_NODES_STATS_FOLDER, serialize($stats));
 
         return $stats;
     }
@@ -1837,11 +1908,9 @@ class nodes
      *
      * @return boolean
      */
-    public function renameNode($oldId, $newId, $schema = null)
+    public function renameNode(string|int|float $oldId, string|int|float $newId, ?string $schema = null): bool
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema ??= $this->schema;
         if ($this->existsNode($newId, $schema)) {
             return false;
         }
@@ -1849,103 +1918,89 @@ class nodes
             return false;
         }
 
-        return $this->waitForNodeAndDo($oldId, function (nodes $db, $params) {
+        return $this->waitForNodeAndDo(
+            schema: $schema,
+            nodeId: $oldId,
+            action: function () use ($oldId, $newId, $schema) {
+                // update references
+                $restore = [];
+                $references = $this->getReferences($schema);
 
-            $oldId = $params['oldId'];
-            $newId = $params['newId'];
-            $schema = $params['schema'];
+                foreach ($references as $rel) {
+                    if ($rel['foreign_schema'] == $schema) {
+                        if (!$this->existsSchema($rel['schema'])) {
+                            continue;
+                        }
 
-            // update references
-            $restore = [];
-            $references = $db->getReferences($schema);
-            foreach ($references as $rel) {
-                if ($rel['foreign_schema'] == $schema) {
-                    if (!$db->existsSchema($rel['schema'])) {
-                        continue;
-                    }
+                        $ids = $this->getIds($rel['schema']);
 
-                    $ids = $db->getNodesID($rel['schema']);
+                        foreach ($ids as $fid) {
+                            $node = $this->getNode($fid, $rel['schema']);
 
-                    foreach ($ids as $fid) {
-                        $node = $db->getNode($fid, $rel['schema']);
+                            $restore[] = [
+                                "node"   => $node,
+                                "id"     => $fid,
+                                "schema" => $rel['schema'],
+                            ];
 
-                        $restore[] = [
-                            "node"   => $node,
-                            "id"     => $fid,
-                            "schema" => $rel['schema'],
-                        ];
-
-                        if (is_array($node)) {
-                            if (isset($node[$rel['property']])) {
-                                if ($node[$rel['property']] == $oldId) {
-                                    $db->setNode($fid, [
-                                        $rel['property'] => $newId,
-                                    ], $rel['schema']);
-
+                            if (is_array($node)) {
+                                if (isset($node[$rel['property']])) {
+                                    if ($node[$rel['property']] == $oldId) {
+                                        $this->setNode($fid, [
+                                            $rel['property'] => $newId,
+                                        ], $rel['schema']);
+                                    }
                                 }
-                            }
-                        } elseif (is_object($node)) {
-                            if (isset($node->$rel['property'])) {
-                                if ($node->$rel['property'] == $oldId) {
-                                    $db->setNode($fid, [
-                                        $rel['property'] => $newId,
-                                    ], $rel['schema']);
+                            } elseif (is_object($node)) {
+                                if (isset($node->$rel['property'])) {
+                                    if ($node->$rel['property'] == $oldId) {
+                                        $this->setNode($fid, [
+                                            $rel['property'] => $newId,
+                                        ], $rel['schema']);
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            // update indexes
-            if (file_exists(DIV_NODES_ROOT.$schema."/$oldId.idx")) {
-                $idx = $db->getNode("$oldId.idx", $schema);
+                // update indexes
+                if (file_exists(DIV_NODES_ROOT . $schema . "/$oldId." . DIV_NODES_INDEX_FILE_EXTENSION)) {
+                    $idx = $this->getNode("$oldId." . DIV_NODES_INDEX_FILE_EXTENSION, $schema);
 
-                foreach ($idx['indexes'] as $wordSchema => $index) {
-                    // update index
-                    $pathToNode = "$schema/$newId";
-                    $nodeIndex = $this->getNode($index, $wordSchema);
-                    $nodeIndex['id'] = $newId;
-                    $nodeIndex['last_update'] = date("Y-m-d h:i:s");
-                    $nodeIndex['path'] = $pathToNode;
+                    foreach ($idx['indexes'] as $wordSchema => $index) {
+                        // update index
+                        $pathToNode = "$schema/$newId";
+                        $nodeIndex = $this->getNode($index, $wordSchema);
+                        $nodeIndex['id'] = $newId;
+                        $nodeIndex['last_update'] = date("Y-m-d h:i:s");
+                        $nodeIndex['path'] = $pathToNode;
 
-                    $db->setNode($index, $nodeIndex, $wordSchema);
+                        $this->setNode($index, $nodeIndex, $wordSchema);
 
-                    // rename index (recursive call)
+                        // rename index (recursive call)
 
-                    $newIndex = md5($pathToNode);
-                    $db->renameNode($index, $newIndex, $wordSchema);
+                        $newIndex = md5($pathToNode);
+                        $this->renameNode($index, $newIndex, $wordSchema);
+
+                        // update inverse indexes
+                        $idx['indexes'][$wordSchema] = $newIndex;
+                    }
 
                     // update inverse indexes
-                    $idx['indexes'][$wordSchema] = $newIndex;
+                    $idx["last_update"] = date("Y-m-d h:i:s");
+                    $this->putNode("$oldId." . DIV_NODES_INDEX_FILE_EXTENSION, $idx, $schema);
+
+                    // real rename of idx file
+                    rename(DIV_NODES_ROOT . $schema . "/$oldId." . DIV_NODES_INDEX_FILE_EXTENSION, DIV_NODES_ROOT . $schema . "/$newId." . DIV_NODES_INDEX_FILE_EXTENSION);
                 }
 
-                // update inverse indexes
-                $idx["last_update"] = date("Y-m-d h:i:s");
-                $this->putNode("$oldId.idx", $idx, $schema);
+                // real rename of node file
+                rename(DIV_NODES_ROOT . $schema . "/$oldId", DIV_NODES_ROOT . $schema . "/$newId");
 
-                // real rename of idx file
-                rename(DIV_NODES_ROOT.$schema."/$oldId.idx", DIV_NODES_ROOT.$schema."/$newId.idx");
+                return true;
             }
-
-            // update .queues
-            $queueFile = DIV_NODES_ROOT."$schema/.queue/$oldId";
-            if (file_exists($queueFile)) {
-                $queueFolder = file_get_contents($queueFile);
-                file_put_contents(DIV_NODES_ROOT."$schema/.queue/$queueFolder.idx", $newId);
-                rename($queueFile, DIV_NODES_ROOT."$schema/.queue/$newId");
-            }
-
-            // real rename of node file
-            rename(DIV_NODES_ROOT.$schema."/$oldId", DIV_NODES_ROOT.$schema."/$newId");
-
-            return true;
-        }, [
-            "oldId"  => $oldId,
-            "newId"  => $newId,
-            "schema" => $schema,
-        ]);
-
+        );
     }
 
     /**
@@ -1953,11 +2008,11 @@ class nodes
      *
      * @param string $schemaTag
      *
-     * @return bool|mixed
+     * @return mixed
      */
-    public function getOrderFirst($schemaTag)
+    public function getOrderFirst(string $schemaTag): mixed
     {
-        $first = $this->getNode('.first', $schemaTag, false);
+        $first = $this->getNode(DIV_NODES_FIRST_NODE, $schemaTag, false);
         if ($first !== false) {
             if (empty($first['id'])) {
                 $first = false;
@@ -1971,13 +2026,13 @@ class nodes
      * Set the first node in order's schema
      *
      * @param string $schemaTag
-     * @param string $orderId
+     * @param string|int|float $orderId
      *
      * @return mixed
      */
-    private function setOrderFirst($schemaTag, $orderId)
+    private function setOrderFirst(string $schemaTag, string|int|float $orderId)
     {
-        return $this->putNode('.first', [
+        return $this->putNode(DIV_NODES_FIRST_NODE, [
             'id'          => $orderId,
             'last_update' => date("Y-m-d h:i:s"),
         ], $schemaTag);
@@ -1991,9 +2046,9 @@ class nodes
      *
      * @return mixed
      */
-    private function setOrderLast($schemaTag, $orderId)
+    private function setOrderLast(string $schemaTag, string|int|float $orderId)
     {
-        return $this->putNode('.last', [
+        return $this->putNode(DIV_NODES_LAST_NODE, [
             'id'          => $orderId,
             'last_update' => date("Y-m-d h:i:s"),
         ], $schemaTag);
@@ -2004,11 +2059,11 @@ class nodes
      *
      * @param string $schemaTag
      *
-     * @return bool|mixed
+     * @return mixed
      */
-    public function getOrderLast($schemaTag)
+    public function getOrderLast(string $schemaTag): mixed
     {
-        $last = $this->getNode('.last', $schemaTag, false);
+        $last = $this->getNode(DIV_NODES_LAST_NODE, $schemaTag, false);
         if ($last !== false) {
             if (empty($last['id'])) {
                 $last = false;
@@ -2022,45 +2077,35 @@ class nodes
      * Add order
      *
      * @param mixed  $value
-     * @param string $nodeId
+     * @param string|int|float $nodeId
      * @param string $tag
-     * @param string $schema
-     * @param string $schemaOrder
+     * @param ?string $schema
+     * @param ?string $schemaOrder
      *
-     * @return boolean
+     * @return bool
+     * 
      * @throws Exception
-     *
      */
-    public function addOrder($value, $nodeId, $tag = 'default', $schema = null, $schemaOrder = null)
+    public function addOrder(mixed $value, string|int|float $nodeId, string $tag = 'default', ?string $schema = null, ?string $schemaOrder = null): bool
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
-        if (is_null($schemaOrder)) {
-            $schemaOrder = $schema."/.order";
-        }
-
+        $schema ??= $this->schema;
+        $schemaOrder ??= $schema . '/' . DIV_NODES_ORDER_FOLDER;
         $schemaTag = "$schemaOrder/$tag";
 
         $this->addSchema($schemaTag);
 
         // wait for unlocked list
-        return $this->waitAndDo(DIV_NODES_ROOT."$schemaTag/.queue/.schema", function (nodes $db, $params) {
-
-            $schemaTag = $params['schemaTag'];
-            $schema = $params['schema'];
-            $nodeId = $params['nodeId'];
-            $value = $params['value'];
+        return $this->waitAndDo(DIV_NODES_ROOT . "$schemaTag", function () use ($schemaTag, $schema, $nodeId, $value) {
             $newNode = false;
             $orderId = md5("$schema/$nodeId");
-            $first = $db->getOrderFirst($schemaTag);
-            $last = $db->getOrderLast($schemaTag);
+            $first = $this->getOrderFirst($schemaTag);
+            $last = $this->getOrderLast($schemaTag);
 
             // check if no nodes
             if ($first === false) {
                 // insert the first
-                $db->setOrderFirst($schemaTag, $orderId);
-                $db->setOrderLast($schemaTag, $orderId);
+                $this->setOrderFirst($schemaTag, $orderId);
+                $this->setOrderLast($schemaTag, $orderId);
 
                 $newNode = [
                     "schema"      => $schema,
@@ -2072,8 +2117,8 @@ class nodes
                 ];
             } else {
 
-                $firstOrder = $db->getNode($first['id'], $schemaTag);
-                $lastOrder = $db->getNode($last['id'], $schemaTag);
+                $firstOrder = $this->getNode($first['id'], $schemaTag);
+                $lastOrder = $this->getNode($last['id'], $schemaTag);
                 $current = $first['id'];
                 $currentOrder = $firstOrder;
 
@@ -2091,8 +2136,8 @@ class nodes
                             ];
 
                             $currentOrder['previous'] = $orderId;
-                            $db->putNode($current, $currentOrder, $schemaTag);
-                            $db->setOrderFirst($schemaTag, $orderId);
+                            $this->putNode($current, $currentOrder, $schemaTag);
+                            $this->setOrderFirst($schemaTag, $orderId);
                             break;
                         }
 
@@ -2108,11 +2153,11 @@ class nodes
 
                         $previous = $currentOrder['previous'];
                         $currentOrder['previous'] = $orderId;
-                        $previousNode = $db->getNode($previous, $schemaTag);
+                        $previousNode = $this->getNode($previous, $schemaTag);
                         $previousNode['next'] = $orderId;
 
-                        $db->putNode($current, $currentOrder, $schemaTag);
-                        $db->putNode($previous, $previousNode, $schemaTag);
+                        $this->putNode($current, $currentOrder, $schemaTag);
+                        $this->putNode($previous, $previousNode, $schemaTag);
                         break;
                     }
 
@@ -2121,14 +2166,13 @@ class nodes
                     }
 
                     $current = $currentOrder['next'];
-                    $currentOrder = $db->getNode($current, $schemaTag);
-
+                    $currentOrder = $this->getNode($current, $schemaTag);
                 } while ($currentOrder['next'] !== false);
 
                 // insert on bottom
                 if ($newNode === false) {
                     $lastOrder['next'] = $orderId;
-                    $db->putNode($last['id'], $lastOrder, $schemaTag);
+                    $this->putNode($last['id'], $lastOrder, $schemaTag);
 
                     $newNode = [
                         "schema"      => $schema,
@@ -2139,25 +2183,19 @@ class nodes
                         'last_update' => date("Y-m-d h:i:s"),
                     ];
 
-                    $db->setOrderLast($schemaTag, $orderId);
+                    $this->setOrderLast($schemaTag, $orderId);
                 }
             }
 
             if ($newNode !== false) {
-                $db->addNode($newNode, $orderId, $schemaTag);
-                $db->addInverseIndex($nodeId, $schema, $orderId, $schemaTag);
+                $this->addNode($newNode, $orderId, $schemaTag);
+                $this->addInverseIndex($nodeId, $schema, $orderId, $schemaTag);
 
                 return true;
             }
 
             return false;
-        }, [
-            'schemaTag'   => $schemaTag,
-            'schema'      => $schema,
-            'schemaOrder' => $schemaOrder,
-            'nodeId'      => $nodeId,
-            'value'       => $value,
-        ]);
+        });
     }
 
     /**
@@ -2171,34 +2209,24 @@ class nodes
      * @param array   $otherData
      * @param string  $schema
      * @param string  $schemaOrder
-     *
-     * @return mixed
      */
-    public function foreachOrder($closure, $tag = 'default', $offset = 0, $limit = -1, $fromFirst = true, &$otherData = [], $schema = null, $schemaOrder = null)
+    public function foreachOrder(array|Closure $closure, string $tag = 'default', int $offset = 0, int $limit = -1, bool $fromFirst = true, ?string $schema = null, ?string $schemaOrder = null): void
     {
-
         if (is_array($closure)) {
-            $tag = isset($closure['tag']) ? $closure['tag'] : $tag;
-            $offset = isset($closure['offset']) ? $closure['offset'] : $offset;
-            $limit = isset($closure['limit']) ? $closure['limit'] : $limit;
-            $fromFirst = isset($closure['fromFirst']) ? $closure['fromFirst'] : $fromFirst;
-            $otherData = isset($closure['otherData']) ? $closure['otherData'] : $otherData;
-            $schema = isset($closure['schema']) ? $closure['schema'] : $schema;
-            $schemaOrder = isset($closure['schemaOrder']) ? $closure['schemaOrder'] : $schemaOrder;
-            $closure = isset($closure['closure'])
-                ? $closure['closure']
-                : function () {
-                };
+            $tag = $closure['tag'] ?? $tag;
+            $offset = $closure['offset'] ?? $offset;
+            $limit = $closure['limit'] ?? $limit;
+            $fromFirst = $closure['fromFirst'] ?? $fromFirst;
+            $schema = $closure['schema'] ?? $schema;
+            $schemaOrder = $closure['schemaOrder'] ?? $schemaOrder;
+            $closure = $closure['closure'] ?? function () { 
+            };
         }
 
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
-        if (is_null($schemaOrder)) {
-            $schemaOrder = $schema."/.order";
-        }
-
+        $schema ??= $this->schema;
+        $schemaOrder ??= $schema . '/' . DIV_NODES_ORDER_FOLDER;
         $schemaTag = "$schemaOrder/$tag";
+
         $this->addSchema($schemaTag);
 
         $first = $this->getOrderFirst($schemaTag);
@@ -2211,12 +2239,14 @@ class nodes
             $iterator = -1;
 
             do {
+
                 $iterator++;
+
                 if ($iterator < $offset) {
                     continue;
                 }
 
-                $result = $closure($currentNode, $iterator, $otherData);
+                $result = $closure($currentNode, $iterator);
 
                 if ($result == DIV_NODES_FOR_BREAK) {
                     break;
@@ -2224,21 +2254,18 @@ class nodes
 
                 $current = $fromFirst ? $currentNode['next'] : $currentNode['previous'];
                 $currentNode = $current !== false ? $this->getNode($current, $schemaTag) : null;
-
             } while ($current !== false && ($iterator < $limit || $limit == -1));
         }
-
-        return $otherData;
     }
 
     /**
      * Clear double slashes in ways
      *
-     * @param $value
+     * @param string $value
      *
-     * @return mixed
+     * @return string
      */
-    static function clearDoubleSlashes($value)
+    static function clearDoubleSlashes(string $value): string
     {
         return self::replaceRecursive('//', '/', $value);
     }
@@ -2252,7 +2279,7 @@ class nodes
      *
      * @return mixed
      */
-    static function replaceRecursive($search, $replace, $source)
+    static function replaceRecursive(string $search, string $replace, string $source): string
     {
         while (strpos($source, $search) !== false) {
             $source = str_replace($search, $replace, $source);
@@ -2271,195 +2298,124 @@ class nodes
      *
      * @return mixed
      */
-    public function addInverseIndex($nodeId, $schema, $index, $wordSchema)
+    public function addInverseIndex(string|int|float $nodeId, string $schema, string $index, string $wordSchema): mixed
     {
-        $node = $this->getNode("$nodeId.idx", $schema, [
+        $node = $this->getNode("$nodeId." . DIV_NODES_INDEX_FILE_EXTENSION, $schema, [
             "indexes"     => [],
             "last_update" => date("Y-m-d h:i:s"),
         ]);
 
         $node['indexes'][$wordSchema] = $index;
         $node['last_update'] = date("Y-m-d h:i:s");
-        $this->putNode("$nodeId.idx", $node, $schema);
+        $this->putNode("$nodeId." . DIV_NODES_INDEX_FILE_EXTENSION, $node, $schema);
 
         return $node;
     }
 
-
     /**
-     * Wait for a turn in the queue and do something
+     * Wait for exclusive access to folder or file and do something
      *
-     * @param        $queueFolder
-     * @param        $closure
-     * @param        $params
-     * @param int    $max_execution_time
-     * @param string $extraFunctionWait
-     * @param array  $extraFunctionWaitParams
-     *
+     * @param string $path
+     * @param \closure|string $action
+     * @param int $max_execution_time
+     * 
      * @return mixed
-     * @throws Exception
-     *
+     * 
+     * @throws \Exception
      */
-    public function waitAndDo($queueFolder, $closure, $params, $max_execution_time = 60, $extraFunctionWait = '', $extraFunctionWaitParams = [])
+    public function waitForUnlockAndDo(string $path, Closure|string $action, int $max_execution_time = 60)
     {
-        $threadId = $this->getThreadID();
-        @mkdir($queueFolder, 0777, true);
-        file_put_contents("$queueFolder/$threadId", $max_execution_time); // max execution time in seconds for this thread
+        $lockFile = $path;
 
-        $i = 0;
-        $last = null;
-        $file = null;
-        do {
+        if (is_dir($path)) {
+            $lockFile = $this->clearDoubleSlashes($path . '/' . DIV_NODES_LOCK_NODE);
+        } else {
+            $lockFile = $this->clearDoubleSlashes($path . DIV_NODES_LOCK_NODE);
+            self::trash($this->getInstanceId(), function () use ($lockFile) {
+                @unlink($lockFile);
+            });
+        }
 
-            if (!is_null($extraFunctionWait) && !empty($extraFunctionWait)) {
-                if ($extraFunctionWait($extraFunctionWaitParams) === false) {
-                    continue;
-                }
-            }
+        if (!file_exists($lockFile)) {
+            $fp = fopen($lockFile, 'w');
+            fclose($fp);
+        }
 
-            // current thread
-            $dir = opendir($queueFolder);
-            $file = readdir($dir);
-            while ($file == '.' || $file == '..') {
-                $file = @readdir($dir);
-            }
-            closedir($dir);
+        $fp = fopen($lockFile, 'r+');
+        if (!$fp) {
+            throw new Exception("Unable to open lock file: {$lockFile}");
+        }
 
-            if ($file == false) {
-                throw new Exception("No access to the queue");
-            }
+        $startTime = time();
+        $timeoutOccurred = false;
 
-            // si al mismo tiempo otro proceso ya borro el item actual, pues ignorar y continuar
-            $max = intval(@file_get_contents("$queueFolder/$file")); // obtengo el maximo tiempo del hilo actual
-
-            if ($file === $threadId) {
+        while (!flock($fp, LOCK_EX)) {
+            usleep(100000);
+            if ((time() - $startTime) > $max_execution_time) {
+                $timeoutOccurred = true;
                 break;
-            } // es mi turno, detengo el ciclo
-
-            if ($last !== $file) {
-                $i = 0;
-            } // si otro hilo borro el item, renovar el conteo de max
-
-            $last = $file;
-
-            usleep(1000); //sleep 1/1000 seconds
-
-            $i++;
-
-            if ($i > $max * 100) {
-                // ignorar si el archivo no existe
-                // release the item and continue
-                @unlink("$queueFolder/$file");
-                $i = 0;
             }
+        }
 
-        } while ($file !== false && $file !== $threadId);
+        if ($timeoutOccurred) {
+            fclose($fp);
+            throw new \Exception("Timeout exceeded while waiting for lock");
+        }
 
-        // Turn for me...Do something...
+        $remainingTime = $max_execution_time - (time() - $startTime);
+        if ($remainingTime <= 0) {
+            flock($fp, LOCK_UN);
+            fclose($fp);
+            throw new \Exception("No time left for operation after acquiring lock");
+        }
 
-        $result = $closure($this, $params);
+        set_time_limit($remainingTime);
 
-        // Done!
-
-        // Destroy thread in the queue
-        @unlink("$queueFolder/$threadId");
+        try {
+            $result = $action();
+        } finally {
+            flock($fp, LOCK_UN);
+            fclose($fp);
+        }
 
         return $result;
+    }
+
+    /**
+     * Wait for exclusive folder access and do something
+     *
+     * @return mixed
+     * @throws \Exception
+     *
+     */
+    public function waitAndDo(string $folder, Closure|string $action, int $max_execution_time = 60): mixed
+    {
+        return $this->waitForUnlockAndDo($folder, $action, $max_execution_time);
     }
 
     /**
      * Wait for exclusive access to node, and do a closure
      *
-     * @param        $nodeId
-     * @param        $closure
-     * @param        $params
-     * @param int    $max_execution_time
-     * @param null   $schema
-     * @param string $queueSchema
-     *
      * @return mixed
-     * @throws Exception
+     * @throws \Exception
      *
      */
-    public function waitForNodeAndDo($nodeId, $closure, $params, $max_execution_time = 60, $schema = null, $queueSchema = '.queue')
+    public function waitForNodeAndDo(string $nodeId, Closure|string $action, int $maxExecutionTime = 60, ?string $schema = null)
     {
-        if (is_null($schema)) {
-            $schema = $this->schema;
-        }
+        $schema = $schema ?? $this->schema;
+        $filePath = DIV_NODES_ROOT . "{$schema}/{$nodeId}";
 
-        if (!file_exists(DIV_NODES_ROOT."$schema/$queueSchema")) {
-            @mkdir(DIV_NODES_ROOT."$schema/$queueSchema");
-        }
-
-        if (!file_exists(DIV_NODES_ROOT."$schema/$queueSchema/$nodeId")) {
-            $queueFolder = date("Ymdhis").uniqid("", true);
-            file_put_contents(DIV_NODES_ROOT."$schema/$queueSchema/$nodeId", $queueFolder);
-            file_put_contents(DIV_NODES_ROOT."$schema/$queueSchema/$queueFolder.idx", $nodeId);
-            @mkdir(DIV_NODES_ROOT."$schema/$queueSchema/$queueFolder", 0777, true);
-        }
-
-        $queueFolder = file_get_contents(DIV_NODES_ROOT."$schema/$queueSchema/$nodeId");
-
-        $result = $this->waitAndDo(DIV_NODES_ROOT."$schema/$queueSchema/$queueFolder", $closure, $params, $max_execution_time, function ($params) {
-
-            // search if exists any pending thread using a locked schema
-            $dir = @opendir(DIV_NODES_ROOT."{$params['schema']}/{$params['queueSchema']}/.schema");
-            if ($dir === false) {
-                return true;
-            }
-
-            $file = @readdir($dir);
-            while ($file == '.' || $file == '..') {
-                $file = @readdir($dir);
-            }
-            closedir($dir);
-
-            if ($file === false) {
-                return true;
-            }
-            if ($file === $params['threadId']) {
-                return true;
-            } // schema locked by it self
-
-            return false;
-
-        }, [
-            "schema"      => $schema,
-            "queueSchema" => $queueSchema,
-            "threadId"    => $this->getThreadID(),
-        ]);
-
-        // trash collector
-        self::trash($this->getInstanceId(), function ($params) {
-
-            $schema = $params['schema'];
-            $queueSchema = $params['queueSchema'];
-            $nodeId = $params['nodeId'];
-            $queueFolder = @file_get_contents(DIV_NODES_ROOT."$schema/$queueSchema/$nodeId");
-
-            if ($queueFolder !== false && @rmdir(DIV_NODES_ROOT."$schema/$queueSchema/$queueFolder")) {
-                @unlink(DIV_NODES_ROOT."$schema/$queueSchema/$nodeId");
-                @unlink(DIV_NODES_ROOT."$schema/$queueSchema/$queueFolder.idx");
-            }
-
-            @rmdir(DIV_NODES_ROOT."$schema/$queueSchema");
-        }, [
-            'schema'      => $schema,
-            'queueSchema' => $queueSchema,
-            'nodeId'      => $nodeId,
-        ]);
-
-        return $result;
+        return $this->waitForUnlockAndDo($filePath, $action, $maxExecutionTime);
     }
 
     /**
      * Save trash operation
      *
      * @param string  $instanceId
-     * @param closure $closure
+     * @param \closure $closure
      * @param array   $params
      */
-    private static function trash($instanceId, $closure, $params = [])
+    private static function trash(string $instanceId, Closure $closure, array $params = []): void
     {
         if (!isset(self::$__trash[$instanceId])) {
             self::$__trash[$instanceId] = [];
@@ -2476,17 +2432,64 @@ class nodes
      *
      * @param string $instanceId
      */
-    public static function emptyTrash($instanceId)
+    public static function emptyTrash(string $instanceId): void
     {
+        self::log("Empty trash for instance: $instanceId");
+
         if (!isset(self::$__trash[$instanceId])) {
             self::$__trash[$instanceId] = [];
         }
 
         foreach (self::$__trash[$instanceId] as $t) {
-            $t['f']($t['p']);
+            $result = $t['f']($t['p']);
+            self::log(" -> Executed trash operation: $result");
         }
 
         self::$__trash[$instanceId] = [];
+    }
+
+    /**
+     * Check if a filename is valid
+     * 
+     * @param string|int|float $filename
+     * 
+     * @return bool
+     */
+    public function isValidId(string|int|float $id): bool
+    {
+        $id = "$id";
+        foreach (DIV_NODES_INVALID_FILENAME_CHARS as $char) {
+            if (strpos($id, $char) !== false) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Generate UUID version 4
+     * 
+     * @return string
+     */
+    public static function generateUUIDv4(): string
+    {
+        // Generate 36 random hex characters (144 bits) 
+        $uuid = bin2hex(random_bytes(18));
+
+        // Insert dashes to match the UUID format 
+        $uuid[8] = $uuid[13] = $uuid[18] = $uuid[23] = '-';
+
+        // Set the UUID version to 4 
+        $uuid[14] = '4';
+
+        // Set the UUID variant: the 19th char must be in [8, 9, a, b] 
+        $uuid[19] = [
+            '8', '9', 'a', 'b', '8', '9',
+            'a', 'b', 'c' => '8', 'd' => '9',
+            'e' => 'a', 'f' => 'b'
+        ][$uuid[19]] ?? $uuid[19];
+
+        return $uuid;
     }
 
     /**

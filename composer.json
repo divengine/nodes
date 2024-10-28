@@ -1,7 +1,7 @@
 {
   "name": "divengine/nodes",
   "license": "GPL-3.0-or-later",
-  "description": "Div PHP Nodes is a No-SQL Database System for PHP written in PHP",
+  "description": "Div PHP Nodes is a Database System for PHP written in PHP",
   "keywords": [
     "no-sql",
     "database",
@@ -9,13 +9,17 @@
     "serialization"
   ],
   "homepage": "https://divengine.com/nodes",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "require": {
-    "php": ">=5.4.0"
+    "php": ">=8.0.0"
   },
   "autoload": {
     "psr-4": {
       "divengine\\": "src/"
     }
+  },
+  "require-dev": {
+    "phpstan/phpstan": "^1.10",
+    "phpunit/phpunit": "^10.5"
   }
 }
