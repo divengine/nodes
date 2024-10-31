@@ -1,3 +1,3 @@
 <?php
 
-define('DATABASE_PATH', dirname(__DIR__) . "/" . getenv('database_relative_path'));
+define('DATABASE_PATH', getenv('database_relative_path'));

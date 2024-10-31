@@ -638,7 +638,7 @@ class nodes
             action: function () use ($nodePath, $default) {
                 // ... and load
                 if ($default === null) {
-                    $data = file_get_contents($nodePath);
+                    $data = @file_get_contents($nodePath);
                 } else {
                     // hide errors if not exists
                     $data = @file_get_contents($nodePath);
@@ -1773,12 +1773,11 @@ class nodes
 
                     // calculate score
                     foreach ($schemas as $sch => $nodes) {
-                        foreach ($nodes as $id => $node) {
-                            //$id = md5($node['path']);
-
+                        foreach ($nodes as $id => $nodeIndex) {
+                            $node = $this->getNode($id, $sch);
                             if (!isset($results[$id])) {
                                 $node['score'] = 0;
-                                $results[$id] = $node;
+                                $results[$id] = $node;                                
                             }
 
                             $results[$id]['score']++;
